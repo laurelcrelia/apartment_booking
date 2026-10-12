@@ -173,21 +173,32 @@ class CliTests(unittest.TestCase):
     def cli(self, *argv):
         out, err = StringIO(), StringIO()
         with redirect_stdout(out), redirect_stderr(err):
-            code = main(["--data", self.data, *argv])
+            code = main([*argv, "--data", self.data])
         return code, out.getvalue(), err.getvalue()
 
     def test_end_to_end_persists(self):
-        self.assertEqual(self.cli("apartment", "add", "Loft", "--rooms", "2")[0], 0)
-        code, out, _ = self.cli("booking", "create", "1", "Ann", "2026-11-01", "2026-11-05")
+        self.assertEqual(self.cli("apartment", "add", "--name", "Loft", "--address", "x", "--rooms", "2")[0], 0)
+        code, out, _ = self.cli("booking", "create", "--apartment", "1", "--from", "2026-11-01",
+                                "--to", "2026-11-05", "--guest", "Ann")
         self.assertEqual(code, 0)
         self.assertIn("Created booking", out)
-        code, _, err = self.cli("booking", "create", "1", "Bob", "2026-11-03", "2026-11-06")
+        code, _, err = self.cli("booking", "create", "--apartment", "1", "--from", "2026-11-03",
+                                "--to", "2026-11-06")
         self.assertEqual(code, 1)
         self.assertIn("already booked", err)
-        _, out, _ = self.cli("search", "2026-11-03", "2026-11-04")
+        _, out, _ = self.cli("apartment", "search", "--from", "2026-11-03", "--to", "2026-11-04")
         self.assertIn("No apartments available", out)
+        _, out, _ = self.cli("booking", "change", "1", "--to", "2026-11-07", "--json")
+        self.assertIn('"check_out": "2026-11-07"', out)
         # Data really lives on disk.
         self.assertEqual(len(JsonStorage(self.data).load()["bookings"]), 1)
+
+
+    def test_help_lists_commands(self):
+        code, out, _ = self.cli("--help")
+        self.assertEqual(code, 0)
+        self.assertIn("booking create --apartment ID --from DATE --to DATE", out)
+        self.assertIn("apartment search --from DATE --to DATE", out)
 
 
 if __name__ == "__main__":

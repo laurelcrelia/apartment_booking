@@ -106,8 +106,6 @@ class BookingService:
 
     def create_booking(self, apt_id: int, guest: str, check_in: str, check_out: str) -> dict:
         guest = (guest or "").strip()
-        if not guest:
-            raise BookingError("Guest name is required")
         d_in, d_out = parse_date(check_in), parse_date(check_out)
         _validate_range(d_in, d_out)
         state = self.storage.load()
@@ -157,8 +155,6 @@ class BookingService:
         self._apartment(state, new_apt)
         self._ensure_no_overlap(state, new_apt, d_in, d_out, ignore_id=booking_id)
         if guest is not None:
-            if not guest.strip():
-                raise BookingError("Guest name cannot be empty")
             booking["guest"] = guest.strip()
         booking.update(apartment_id=new_apt, check_in=d_in.isoformat(), check_out=d_out.isoformat())
         self.storage.save(state)

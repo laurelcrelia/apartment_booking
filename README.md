@@ -7,28 +7,40 @@ Requires Python 3.9+. No dependencies.
 ```sh
 git clone https://github.com/laurelcrelia/apartment_booking.git
 cd apartment_booking
-python3 -m apartment_booking --help
+python3 booking.py --help
 ```
 
 ## Usage
 
-```sh
-python3 -m apartment_booking apartment add "Loft" --address "1 Beach Rd" --rooms 2 --price 120
-python3 -m apartment_booking apartment list | view ID | update ID [--name --address --rooms --price] | remove ID
-
-python3 -m apartment_booking booking create APARTMENT_ID GUEST CHECK_IN CHECK_OUT
-python3 -m apartment_booking booking list [--apartment ID] [--guest NAME] [--all]
-python3 -m apartment_booking booking view ID | cancel ID
-python3 -m apartment_booking booking change ID [--apartment --guest --check-in --check-out]
-
-python3 -m apartment_booking search CHECK_IN CHECK_OUT [--min-rooms N]
+```
+Usage: booking.py COMMAND [OPTIONS]
+Commands:
+apartment list
+apartment view ID
+apartment add --name NAME --address ADDRESS [--rooms N] [--price PRICE]
+apartment update ID [--name NAME] [--address ADDRESS] [--rooms N] [--price PRICE]
+apartment remove ID
+apartment search --from DATE --to DATE [--min-rooms N]
+booking list [--apartment ID] [--guest NAME] [--all]
+booking view ID
+booking create --apartment ID --from DATE --to DATE [--guest NAME]
+booking change ID [--from DATE] [--to DATE] [--apartment ID] [--guest NAME]
+booking cancel ID
 ```
 
-- Dates are `YYYY-MM-DD`. Check-out is exclusive, so back-to-back stays are allowed.
+Example:
+
+```sh
+python3 booking.py apartment add --name Loft --address "1 Beach Rd"
+python3 booking.py booking create --apartment 1 --from 2026-11-01 --to 2026-11-05
+python3 booking.py apartment search --from 2026-11-03 --to 2026-11-04
+```
+
+- Dates are `YYYY-MM-DD`. `--to` is the check-out day (exclusive), so back-to-back stays are allowed.
 - Overlapping bookings for the same apartment are rejected (exit code 1).
 - Cancelled bookings free their dates and are shown only with `--all`.
 - Apartments with active bookings can't be removed.
-- Add `--json` before the command for JSON output.
+- Add `--json` to any command for JSON output.
 
 ## Data
 
