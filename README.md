@@ -1,6 +1,8 @@
 # Apartment Booking CLI
 
-Authors: Laurel Matt and Kleidi Gjeta
+Authors: Laurel Matt and Kleidi Gjeta 
+
+> This app was made as an exercise for the course Continuous Integration and Delivery (76106B) at the Free University of Bozen-Bolzano (unibz).
 
 Command-line app for managing apartments and bookings, with availability search and overlap prevention.
 
