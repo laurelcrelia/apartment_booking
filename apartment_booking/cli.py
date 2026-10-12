@@ -13,7 +13,7 @@ DEFAULT_DATA_FILE = os.environ.get("APT_DATA_FILE", "data.json")
 
 
 def build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(prog="apt", description="Apartment booking CLI")
+    p = argparse.ArgumentParser(prog="python3 -m apartment_booking", description="Apartment booking CLI")
     p.add_argument("--data", default=DEFAULT_DATA_FILE,
                    help="path to JSON data file (default: $APT_DATA_FILE or ./data.json)")
     p.add_argument("--json", action="store_true", help="print results as JSON")
