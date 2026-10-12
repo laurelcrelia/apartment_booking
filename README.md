@@ -1,5 +1,7 @@
 # Apartment Booking CLI
 
+Authors: Laurel Matt and Kleidi Gjeta
+
 Command-line app for managing apartments and bookings, with availability search and overlap prevention.
 
 Requires Python 3.9+. No dependencies.
