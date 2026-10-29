@@ -50,6 +50,39 @@ python3 booking.py apartment search --from 2026-11-03 --to 2026-11-04
 
 Data is stored in `./data.json`. Override with `--data PATH` or `APT_DATA_FILE`.
 
+## Docker
+
+Requires Docker with Compose. No local Python needed.
+
+Build the image once:
+
+```sh
+docker compose build
+```
+
+Run any command by putting it after `docker compose run --rm booking`:
+
+```sh
+docker compose run --rm booking --help
+docker compose run --rm booking apartment add --name Loft --address "1 Beach Rd"
+docker compose run --rm booking apartment list
+```
+
+`--rm` removes the container when the command finishes. Your data is kept in the `booking-data` Docker volume, so it is still there between runs. It is separate from the local `./data.json`. To delete it, run `docker compose down -v`.
+
+Run the tests:
+
+```sh
+docker compose --profile test run --rm tests
+```
+
+Without Compose:
+
+```sh
+docker build -t apartment-booking .
+docker run --rm -v booking-data:/data apartment-booking apartment list
+```
+
 ## Tests
 
 ```sh

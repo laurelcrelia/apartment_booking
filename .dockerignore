@@ -1,0 +1,11 @@
+.git
+.gitignore
+.DS_Store
+**/__pycache__
+**/*.pyc
+*.tmp
+data.json
+documentation/
+Dockerfile
+.dockerignore
+compose.yaml

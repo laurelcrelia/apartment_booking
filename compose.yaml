@@ -1,0 +1,16 @@
+services:
+  booking:
+    build: .
+    image: apartment-booking
+    volumes:
+      - booking-data:/data
+
+  tests:
+    build: .
+    image: apartment-booking
+    entrypoint: ["python", "-m", "unittest", "-v"]
+    profiles: ["test"]
+
+volumes:
+  booking-data:
+    name: booking-data
