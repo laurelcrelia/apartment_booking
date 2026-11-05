@@ -88,3 +88,11 @@ docker run --rm -v booking-data:/data apartment-booking apartment list
 ```sh
 python3 -m unittest -v
 ```
+
+## CI
+
+GitHub Actions (`.github/workflows/ci.yml`) runs on every push to `main` and on every pull request. It builds the Docker image for each Python version from 3.9 to 3.13 and runs the tests inside it. To build for a specific version locally:
+
+```sh
+docker build --build-arg PYTHON_VERSION=3.9 -t apartment-booking:py3.9 .
+```
