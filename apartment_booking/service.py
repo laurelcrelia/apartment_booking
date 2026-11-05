@@ -36,7 +36,7 @@ def _validate_range(check_in: date, check_out: date) -> None:
 
 
 def _overlaps(a_in: date, a_out: date, b_in: date, b_out: date) -> bool:
-    return a_in <= b_out and b_in <= a_out
+    return a_in < b_out and b_in < a_out
 
 
 class BookingService:
