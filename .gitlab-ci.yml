@@ -1,0 +1,69 @@
+# GitLab CI for a self-hosted runner using the shell executor: jobs run
+# directly on the runner machine and use its Docker. See README "GitLab CI".
+
+workflow:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_PIPELINE_SOURCE == "web"
+
+stages: [test, e2e]
+
+default:
+  tags: [local-docker]
+  interruptible: true
+
+variables:
+  # Separate Compose project, data volume and port per job, so CI never
+  # touches the app you run yourself on the same machine.
+  COMPOSE_PROJECT_NAME: ci-$CI_JOB_ID
+  BOOKING_VOLUME: booking-data-ci-$CI_JOB_ID
+  APP_PORT: "18000"
+
+docker-test:
+  stage: test
+  parallel:
+    matrix:
+      - PYTHON_VERSION: ["3.9", "3.10", "3.11", "3.12", "3.13"]
+  script:
+    - docker build --target test --build-arg PYTHON_VERSION=$PYTHON_VERSION -t ci-test:$CI_JOB_ID .
+    - docker run --rm ci-test:$CI_JOB_ID
+    - docker build --build-arg PYTHON_VERSION=$PYTHON_VERSION -t ci-app:$CI_JOB_ID .
+    - docker run --rm --entrypoint python ci-app:$CI_JOB_ID booking.py --help
+  after_script:
+    - docker image rm -f ci-test:$CI_JOB_ID ci-app:$CI_JOB_ID
+
+coverage:
+  stage: test
+  script:
+    - python3 -m venv .venv
+    - .venv/bin/pip install -r requirements-dev.txt
+    - .venv/bin/coverage run --source=apartment_booking -m unittest -v
+    - .venv/bin/coverage report -m
+    - .venv/bin/coverage xml
+    - .venv/bin/coverage html
+    - .venv/bin/coverage report --fail-under=90
+  coverage: '/^TOTAL.*\s(\d+%)$/'
+  artifacts:
+    when: always
+    paths: [htmlcov/]
+    reports:
+      coverage_report:
+        coverage_format: cobertura
+        path: coverage.xml
+
+compose-e2e:
+  stage: e2e
+  script:
+    - docker compose up -d --build --wait
+    - python3 scripts/smoke_test.py http://localhost:$APP_PORT --keep > smoke.log || { cat smoke.log; exit 1; }
+    - cat smoke.log
+    - ID=$(grep KEPT_APARTMENT_ID smoke.log | cut -d= -f2)
+    - docker compose down
+    - docker compose up -d --wait
+    - curl -fsS http://localhost:$APP_PORT/api/apartments/$ID
+    - docker compose run --rm booking apartment view $ID
+    - docker compose --profile test run --rm --build tests
+  after_script:
+    - docker compose logs
+    - docker compose down -v --remove-orphans

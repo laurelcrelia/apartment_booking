@@ -3,7 +3,7 @@ services:
     build: .
     image: apartment-booking
     ports:
-      - "127.0.0.1:8000:8000"
+      - "127.0.0.1:${APP_PORT:-8000}:8000"
     volumes:
       - booking-data:/data
     restart: unless-stopped
@@ -34,4 +34,5 @@ services:
 
 volumes:
   booking-data:
-    name: booking-data
+    # Overridable so CI on a developer machine never touches the real data.
+    name: ${BOOKING_VOLUME:-booking-data}

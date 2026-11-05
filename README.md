@@ -173,3 +173,23 @@ To build for a specific Python version locally:
 ```sh
 docker build --build-arg PYTHON_VERSION=3.9 -t apartment-booking:py3.9 .
 ```
+
+## GitLab CI
+
+The project is mirrored to [gitlab.inf.unibz.it](https://gitlab.inf.unibz.it/LaurelCrelia.Matt/apartment_booking). `.gitlab-ci.yml` runs the same three jobs as GitHub Actions on a self-hosted runner using the **shell executor**: jobs run directly on the runner machine and use its Docker, so no Docker-in-Docker is needed.
+
+Each job uses its own Compose project, data volume (`booking-data-ci-<job id>`) and port (`18000`), so CI never touches the app or data you run yourself on the same machine. Override them for your own use with `APP_PORT` and `BOOKING_VOLUME`.
+
+Runner setup (macOS, once):
+
+1. In GitLab, go to **Settings → CI/CD → Runners → New project runner**. Add the tag `local-docker`, leave "Run untagged jobs" unchecked, check "Protected", and copy the token.
+2. Register the runner. `--env` gives jobs a `PATH` that includes Docker:
+   ```sh
+   gitlab-runner register --non-interactive \
+     --url https://gitlab.inf.unibz.it --token <glrt-token> \
+     --executor shell --name "$(hostname -s)" \
+     --env "PATH=$HOME/.docker/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+   ```
+3. Start it: `brew services start gitlab-runner`, then check with `gitlab-runner verify`.
+
+Keep `concurrent = 1` in `~/.gitlab-runner/config.toml`. Jobs run with your user's permissions, so the runner is protected and project-only: only people who can push to `main` can trigger it. Stop it when not needed with `brew services stop gitlab-runner`.
