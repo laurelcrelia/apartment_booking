@@ -3,3 +3,5 @@ __pycache__/
 data.json
 *.tmp
 .DS_Store
+.coverage
+htmlcov/
