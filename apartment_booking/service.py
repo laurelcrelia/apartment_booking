@@ -19,7 +19,11 @@ class NotFoundError(BookingError):
     pass
 
 
-class OverlapError(BookingError):
+class ConflictError(BookingError):
+    """The request is valid but clashes with the current state of the data."""
+
+
+class OverlapError(ConflictError):
     pass
 
 
@@ -96,7 +100,7 @@ class BookingService:
                   if b["apartment_id"] == apt_id and b["status"] == ACTIVE]
         if active:
             ids = ", ".join(str(b["id"]) for b in active)
-            raise BookingError(
+            raise ConflictError(
                 f"Apartment {apt_id} has active bookings ({ids}); cancel them first")
         del state["apartments"][str(apt_id)]
         self.storage.save(state)
@@ -147,7 +151,7 @@ class BookingService:
         state = self.storage.load()
         booking = self._booking(state, booking_id)
         if booking["status"] != ACTIVE:
-            raise BookingError(f"Booking {booking_id} is cancelled and cannot be changed")
+            raise ConflictError(f"Booking {booking_id} is cancelled and cannot be changed")
         new_apt = booking["apartment_id"] if apt_id is None else apt_id
         d_in = parse_date(check_in if check_in is not None else booking["check_in"])
         d_out = parse_date(check_out if check_out is not None else booking["check_out"])
@@ -164,7 +168,7 @@ class BookingService:
         state = self.storage.load()
         booking = self._booking(state, booking_id)
         if booking["status"] == CANCELLED:
-            raise BookingError(f"Booking {booking_id} is already cancelled")
+            raise ConflictError(f"Booking {booking_id} is already cancelled")
         booking["status"] = CANCELLED
         self.storage.save(state)
         return booking

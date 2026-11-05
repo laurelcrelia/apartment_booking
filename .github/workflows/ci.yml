@@ -24,20 +24,25 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Build image
+      - name: Build test image
+        run: >
+          docker build --target test
+          --build-arg PYTHON_VERSION=${{ matrix.python-version }}
+          -t apartment-booking:test-py${{ matrix.python-version }} .
+
+      - name: Run tests in container
+        run: docker run --rm apartment-booking:test-py${{ matrix.python-version }}
+
+      - name: Build runtime image
         run: >
           docker build
           --build-arg PYTHON_VERSION=${{ matrix.python-version }}
           -t apartment-booking:py${{ matrix.python-version }} .
 
-      - name: Run tests in container
+      - name: Smoke test CLI
         run: >
           docker run --rm --entrypoint python
-          apartment-booking:py${{ matrix.python-version }}
-          -m unittest -v
-
-      - name: Smoke test CLI
-        run: docker run --rm apartment-booking:py${{ matrix.python-version }} --help
+          apartment-booking:py${{ matrix.python-version }} booking.py --help
 
   coverage:
     name: Code coverage
@@ -49,8 +54,8 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install coverage
-        run: pip install coverage
+      - name: Install dependencies
+        run: pip install -r requirements-dev.txt
 
       - name: Run tests with coverage
         run: coverage run --source=apartment_booking -m unittest -v
@@ -70,3 +75,36 @@ jobs:
 
       - name: Enforce minimum coverage
         run: coverage report --fail-under=90
+
+  compose:
+    name: Docker Compose end-to-end
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Start app
+        run: docker compose up -d --build --wait
+
+      - name: Run workflows against http://localhost:8000
+        id: smoke
+        run: python3 scripts/smoke_test.py http://localhost:8000 --keep | tee smoke.log && grep KEPT_APARTMENT_ID smoke.log >> "$GITHUB_OUTPUT"
+
+      - name: Data survives a restart
+        run: |
+          docker compose down
+          docker compose up -d --wait
+          curl -fsS http://localhost:8000/api/apartments/${{ steps.smoke.outputs.KEPT_APARTMENT_ID }}
+
+      - name: CLI shares the data volume
+        run: docker compose run --rm booking apartment view ${{ steps.smoke.outputs.KEPT_APARTMENT_ID }}
+
+      - name: Tests run via Compose
+        run: docker compose --profile test run --rm --build tests
+
+      - name: Show logs
+        if: failure()
+        run: docker compose logs
+
+      - name: Stop app
+        if: always()
+        run: docker compose down -v

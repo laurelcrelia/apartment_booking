@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}Booking {{ booking.id }}{% endblock %}
+{% block content %}
+<p class="crumbs"><a href="{{ url_for('pages.bookings') }}">Bookings</a> /</p>
+<h1>Booking #{{ booking.id }} <span class="badge {{ booking.status }}">{{ booking.status }}</span></h1>
+<dl class="facts">
+  <dt>Apartment</dt><dd><a href="{{ url_for('pages.apartment', apartment_id=booking.apartment_id) }}">{{ booking.apartment_id }}</a></dd>
+  <dt>Guest</dt><dd>{{ booking.guest or "–" }}</dd>
+  <dt>Check-in</dt><dd>{{ booking.check_in }}</dd>
+  <dt>Check-out</dt><dd>{{ booking.check_out }}</dd>
+</dl>
+
+{% if booking.status == "active" %}
+<div class="cards">
+  <section class="card">
+    <h2>Change booking</h2>
+    <form data-api="/api/bookings/{{ booking.id }}" data-method="PATCH" data-flash="Booking changed">
+      <label>Apartment {% with selected=booking.apartment_id %}{% include "_apartment_select.html" %}{% endwith %}</label>
+      <label>Check-in <input type="date" name="check_in" value="{{ booking.check_in }}" required></label>
+      <label>Check-out <input type="date" name="check_out" value="{{ booking.check_out }}" required></label>
+      <label>Guest <input name="guest" value="{{ booking.guest }}"></label>
+      {% include "_status.html" %}
+      <button type="submit">Save changes</button>
+    </form>
+  </section>
+
+  <section class="card">
+    <h2>Cancel booking</h2>
+    <form data-api="/api/bookings/{{ booking.id }}" data-method="PATCH" data-flash="Booking cancelled"
+          data-confirm="Cancel booking {{ booking.id }}?">
+      <input type="hidden" name="status" value="cancelled">
+      <p>Cancelling frees the dates. Cancelled bookings can't be changed.</p>
+      {% include "_status.html" %}
+      <button type="submit" class="danger">Cancel booking</button>
+    </form>
+  </section>
+</div>
+{% else %}
+<p class="empty">This booking is cancelled and can no longer be changed.</p>
+{% endif %}
+{% endblock %}

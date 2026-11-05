@@ -1,0 +1,440 @@
+openapi: 3.0.3
+info:
+  title: Apartment Booking API
+  version: 1.0.0
+  description: |
+    REST API for managing apartments and their bookings.
+
+    - Request and response bodies are JSON. Requests with a body must send
+      `Content-Type: application/json`.
+    - Dates are `YYYY-MM-DD`. A stay runs from `check_in` up to, but not
+      including, `check_out`, so back-to-back stays (one guest checks out the
+      day the next checks in) are allowed.
+    - Overlapping active bookings for the same apartment are rejected with
+      `409 Conflict`.
+    - Cancelled bookings free their dates. They are kept, but hidden from
+      listings unless `include_cancelled=true`.
+    - Unknown fields in a request body are rejected with `400`.
+    - Every error response has the same shape (see `Error`).
+servers:
+  - url: /api
+tags:
+  - name: Apartments
+  - name: Bookings
+  - name: Meta
+
+paths:
+  /apartments:
+    get:
+      tags: [Apartments]
+      operationId: listApartments
+      summary: List apartments or search availability
+      description: |
+        Without `from` and `to`, returns every apartment. With both, returns
+        only apartments that have no active booking overlapping that stay.
+        `min_rooms` filters either way.
+      parameters:
+        - name: from
+          in: query
+          description: Check-in date of the stay to search for. Requires `to`.
+          schema: {type: string, format: date}
+          example: "2026-11-01"
+        - name: to
+          in: query
+          description: Check-out date (exclusive) of the stay to search for. Requires `from`.
+          schema: {type: string, format: date}
+          example: "2026-11-05"
+        - name: min_rooms
+          in: query
+          description: Only return apartments with at least this many rooms.
+          schema: {type: integer, minimum: 1, default: 1}
+      responses:
+        "200":
+          description: Apartments sorted by ID.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: "#/components/schemas/Apartment"}
+              example:
+                - {id: 1, name: Loft, address: 1 Beach Rd, rooms: 2, price: 80.0}
+                - {id: 2, name: Studio, address: 2 Main St, rooms: 1, price: 55.0}
+        "400":
+          $ref: "#/components/responses/ValidationError"
+    post:
+      tags: [Apartments]
+      operationId: createApartment
+      summary: Add an apartment
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/ApartmentCreate"}
+            example: {name: Loft, address: 1 Beach Rd, rooms: 2, price: 80}
+      responses:
+        "201":
+          description: Apartment created.
+          headers:
+            Location:
+              description: URL of the new apartment.
+              schema: {type: string}
+              example: /api/apartments/1
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Apartment"}
+              example: {id: 1, name: Loft, address: 1 Beach Rd, rooms: 2, price: 80}
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "415":
+          $ref: "#/components/responses/UnsupportedMediaType"
+
+  /apartments/{apartment_id}:
+    parameters:
+      - $ref: "#/components/parameters/ApartmentId"
+    get:
+      tags: [Apartments]
+      operationId: getApartment
+      summary: Show an apartment
+      responses:
+        "200":
+          description: The apartment.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Apartment"}
+              example: {id: 1, name: Loft, address: 1 Beach Rd, rooms: 2, price: 80.0}
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [Apartments]
+      operationId: updateApartment
+      summary: Update an apartment
+      description: Changes only the fields that are sent.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/ApartmentUpdate"}
+            example: {price: 95.5}
+      responses:
+        "200":
+          description: The updated apartment.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Apartment"}
+              example: {id: 1, name: Loft, address: 1 Beach Rd, rooms: 2, price: 95.5}
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "415":
+          $ref: "#/components/responses/UnsupportedMediaType"
+    delete:
+      tags: [Apartments]
+      operationId: deleteApartment
+      summary: Remove an apartment
+      description: Fails with `409` while the apartment has active bookings.
+      responses:
+        "204":
+          description: Apartment removed.
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: The apartment still has active bookings.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+              example:
+                error:
+                  code: conflict
+                  message: Apartment 1 has active bookings (3); cancel them first
+
+  /bookings:
+    get:
+      tags: [Bookings]
+      operationId: listBookings
+      summary: List bookings
+      description: Returns bookings sorted by check-in date. Cancelled bookings are left out by default.
+      parameters:
+        - name: apartment_id
+          in: query
+          description: Only bookings for this apartment.
+          schema: {type: integer}
+        - name: guest
+          in: query
+          description: Only bookings for this guest (case-insensitive exact match).
+          schema: {type: string}
+        - name: include_cancelled
+          in: query
+          description: Also return cancelled bookings.
+          schema: {type: boolean, default: false}
+      responses:
+        "200":
+          description: Matching bookings.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: "#/components/schemas/Booking"}
+              example:
+                - {id: 1, apartment_id: 1, guest: Ann, check_in: "2026-11-01", check_out: "2026-11-05", status: active}
+        "400":
+          $ref: "#/components/responses/ValidationError"
+    post:
+      tags: [Bookings]
+      operationId: createBooking
+      summary: Create a booking
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/BookingCreate"}
+            example: {apartment_id: 1, check_in: "2026-11-01", check_out: "2026-11-05", guest: Ann}
+      responses:
+        "201":
+          description: Booking created.
+          headers:
+            Location:
+              description: URL of the new booking.
+              schema: {type: string}
+              example: /api/bookings/1
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Booking"}
+              example: {id: 1, apartment_id: 1, guest: Ann, check_in: "2026-11-01", check_out: "2026-11-05", status: active}
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Overlap"
+        "415":
+          $ref: "#/components/responses/UnsupportedMediaType"
+
+  /bookings/{booking_id}:
+    parameters:
+      - $ref: "#/components/parameters/BookingId"
+    get:
+      tags: [Bookings]
+      operationId: getBooking
+      summary: Show a booking
+      responses:
+        "200":
+          description: The booking.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Booking"}
+              example: {id: 1, apartment_id: 1, guest: Ann, check_in: "2026-11-01", check_out: "2026-11-05", status: active}
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [Bookings]
+      operationId: updateBooking
+      summary: Change or cancel a booking
+      description: |
+        Send any of `apartment_id`, `check_in`, `check_out` and `guest` to
+        change an active booking. The new dates may overlap the booking's own
+        old dates, but not other bookings.
+
+        Send `{"status": "cancelled"}` on its own to cancel the booking.
+        Cancelled bookings cannot be changed or cancelled again.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/BookingUpdate"}
+            examples:
+              change:
+                summary: Move the check-out date
+                value: {check_out: "2026-11-07"}
+              cancel:
+                summary: Cancel the booking
+                value: {status: cancelled}
+      responses:
+        "200":
+          description: The updated booking.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Booking"}
+              example: {id: 1, apartment_id: 1, guest: Ann, check_in: "2026-11-01", check_out: "2026-11-05", status: cancelled}
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: |
+            The new dates overlap another booking, or the booking is already cancelled.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+              examples:
+                overlap:
+                  value:
+                    error:
+                      code: conflict
+                      message: Apartment 1 is already booked from 2026-11-05 to 2026-11-08 (booking 2)
+                cancelled:
+                  value:
+                    error:
+                      code: conflict
+                      message: Booking 1 is cancelled and cannot be changed
+        "415":
+          $ref: "#/components/responses/UnsupportedMediaType"
+
+  /health:
+    get:
+      tags: [Meta]
+      operationId: health
+      summary: Health check
+      responses:
+        "200":
+          description: The service is running.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: {type: string, enum: [ok]}
+              example: {status: ok}
+
+  /openapi.yaml:
+    get:
+      tags: [Meta]
+      operationId: openapiSpec
+      summary: This OpenAPI specification
+      responses:
+        "200":
+          description: The specification in YAML.
+          content:
+            application/yaml:
+              schema: {type: string}
+
+components:
+  parameters:
+    ApartmentId:
+      name: apartment_id
+      in: path
+      required: true
+      schema: {type: integer}
+      example: 1
+    BookingId:
+      name: booking_id
+      in: path
+      required: true
+      schema: {type: integer}
+      example: 1
+
+  schemas:
+    Apartment:
+      type: object
+      required: [id, name, address, rooms, price]
+      properties:
+        id: {type: integer, readOnly: true, example: 1}
+        name: {type: string, example: Loft}
+        address: {type: string, example: 1 Beach Rd}
+        rooms: {type: integer, minimum: 1, example: 2}
+        price: {type: number, minimum: 0, description: Price per night., example: 80.0}
+    ApartmentCreate:
+      type: object
+      additionalProperties: false
+      required: [name, address]
+      properties:
+        name: {type: string, minLength: 1, description: Must not be blank.}
+        address: {type: string}
+        rooms: {type: integer, minimum: 1, default: 1}
+        price: {type: number, minimum: 0, default: 0, description: Price per night.}
+    ApartmentUpdate:
+      type: object
+      additionalProperties: false
+      properties:
+        name: {type: string, minLength: 1, description: Must not be blank.}
+        address: {type: string}
+        rooms: {type: integer, minimum: 1}
+        price: {type: number, minimum: 0, description: Price per night.}
+    Booking:
+      type: object
+      required: [id, apartment_id, guest, check_in, check_out, status]
+      properties:
+        id: {type: integer, readOnly: true, example: 1}
+        apartment_id: {type: integer, example: 1}
+        guest: {type: string, description: Empty if no guest name was given., example: Ann}
+        check_in: {type: string, format: date, example: "2026-11-01"}
+        check_out: {type: string, format: date, description: Exclusive; must be after check_in., example: "2026-11-05"}
+        status: {type: string, enum: [active, cancelled], readOnly: true}
+    BookingCreate:
+      type: object
+      additionalProperties: false
+      required: [apartment_id, check_in, check_out]
+      properties:
+        apartment_id: {type: integer}
+        check_in: {type: string, format: date}
+        check_out: {type: string, format: date, description: Exclusive; must be after check_in.}
+        guest: {type: string, default: ""}
+    BookingUpdate:
+      type: object
+      additionalProperties: false
+      description: Either any of the change fields, or `status` on its own.
+      properties:
+        apartment_id: {type: integer}
+        check_in: {type: string, format: date}
+        check_out: {type: string, format: date}
+        guest: {type: string}
+        status:
+          type: string
+          enum: [cancelled]
+          description: Set to `cancelled` to cancel the booking. Cannot be combined with other fields.
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              description: Machine-readable error type.
+              enum: [validation_error, not_found, conflict, unsupported_media_type, method_not_allowed]
+            message:
+              type: string
+              description: Human-readable explanation.
+
+  responses:
+    ValidationError:
+      description: |
+        The request is invalid: malformed JSON, unknown or missing fields, wrong
+        types, a bad date, check-out not after check-in, a blank name, rooms
+        below 1, a negative price, or a bad query parameter.
+      content:
+        application/json:
+          schema: {$ref: "#/components/schemas/Error"}
+          example:
+            error:
+              code: validation_error
+              message: Check-out date must be after check-in date
+    NotFound:
+      description: The apartment or booking does not exist.
+      content:
+        application/json:
+          schema: {$ref: "#/components/schemas/Error"}
+          example:
+            error:
+              code: not_found
+              message: Apartment 42 not found
+    Overlap:
+      description: The apartment is already booked for some of the requested dates.
+      content:
+        application/json:
+          schema: {$ref: "#/components/schemas/Error"}
+          example:
+            error:
+              code: conflict
+              message: Apartment 1 is already booked from 2026-11-01 to 2026-11-05 (booking 1)
+    UnsupportedMediaType:
+      description: The request body was not sent as `application/json`.
+      content:
+        application/json:
+          schema: {$ref: "#/components/schemas/Error"}
+          example:
+            error:
+              code: unsupported_media_type
+              message: "Request body must be JSON (Content-Type: application/json)"

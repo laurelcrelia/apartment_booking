@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}{% endblock %} · Apartment Booking</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <script src="{{ url_for('static', filename='app.js') }}" defer></script>
+</head>
+<body>
+  <header>
+    <nav>
+      <a class="brand" href="{{ url_for('pages.apartments') }}">Apartment Booking</a>
+      <a href="{{ url_for('pages.apartments') }}">Apartments</a>
+      <a href="{{ url_for('pages.bookings') }}">Bookings</a>
+      <a href="{{ url_for('pages.api_docs') }}">API</a>
+    </nav>
+  </header>
+  <main>
+    <p id="flash" class="notice success" role="status" hidden></p>
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>

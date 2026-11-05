@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}{{ apartment.name }}{% endblock %}
+{% block content %}
+<p class="crumbs"><a href="{{ url_for('pages.apartments') }}">Apartments</a> /</p>
+<h1>{{ apartment.name }} <small>#{{ apartment.id }}</small></h1>
+<dl class="facts">
+  <dt>Address</dt><dd>{{ apartment.address or "–" }}</dd>
+  <dt>Rooms</dt><dd>{{ apartment.rooms }}</dd>
+  <dt>Price / night</dt><dd>{{ "%.2f"|format(apartment.price) }}</dd>
+</dl>
+
+<h2>Bookings</h2>
+{% include "_bookings_table.html" %}
+
+<div class="cards">
+  <section class="card">
+    <h2>Book this apartment</h2>
+    <form data-api="/api/bookings" data-method="POST" data-redirect="/bookings/{id}" data-flash="Booking created">
+      <input type="hidden" name="apartment_id" value="{{ apartment.id }}" data-type="int">
+      <label>Check-in <input type="date" name="check_in" value="{{ request.args.get('from', '') }}" required></label>
+      <label>Check-out <input type="date" name="check_out" value="{{ request.args.get('to', '') }}" required></label>
+      <label>Guest <input name="guest"></label>
+      {% include "_status.html" %}
+      <button type="submit">Create booking</button>
+    </form>
+  </section>
+
+  <section class="card">
+    <h2>Edit apartment</h2>
+    <form data-api="/api/apartments/{{ apartment.id }}" data-method="PATCH" data-flash="Apartment updated">
+      <label>Name <input name="name" value="{{ apartment.name }}" required></label>
+      <label>Address <input name="address" value="{{ apartment.address }}"></label>
+      <label>Rooms <input type="number" name="rooms" min="1" step="1" value="{{ apartment.rooms }}" data-type="int"></label>
+      <label>Price per night <input type="number" name="price" min="0" step="0.01" value="{{ apartment.price }}" data-type="number"></label>
+      {% include "_status.html" %}
+      <button type="submit">Save changes</button>
+    </form>
+  </section>
+
+  <section class="card">
+    <h2>Remove apartment</h2>
+    <form data-api="/api/apartments/{{ apartment.id }}" data-method="DELETE" data-redirect="/"
+          data-flash="Apartment removed" data-confirm="Remove {{ apartment.name }}? This cannot be undone.">
+      <p>Apartments with active bookings can't be removed. Cancel their bookings first.</p>
+      {% include "_status.html" %}
+      <button type="submit" class="danger">Remove apartment</button>
+    </form>
+  </section>
+</div>
+{% endblock %}

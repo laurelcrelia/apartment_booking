@@ -1,0 +1,5 @@
+<select name="apartment_id" data-type="int" required>
+  {% for a in apartments %}
+  <option value="{{ a.id }}" {% if a.id == selected %}selected{% endif %}>{{ a.id }} · {{ a.name }}</option>
+  {% endfor %}
+</select>

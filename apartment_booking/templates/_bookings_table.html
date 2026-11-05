@@ -1,0 +1,19 @@
+{% if bookings %}
+<table>
+  <thead><tr><th>ID</th><th>Apartment</th><th>Guest</th><th>Check-in</th><th>Check-out</th><th>Status</th></tr></thead>
+  <tbody>
+  {% for b in bookings %}
+    <tr class="{{ b.status }}">
+      <td><a href="{{ url_for('pages.booking', booking_id=b.id) }}">{{ b.id }}</a></td>
+      <td><a href="{{ url_for('pages.apartment', apartment_id=b.apartment_id) }}">{{ b.apartment_id }}</a></td>
+      <td>{{ b.guest or "–" }}</td>
+      <td>{{ b.check_in }}</td>
+      <td>{{ b.check_out }}</td>
+      <td><span class="badge {{ b.status }}">{{ b.status }}</span></td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="empty">No bookings.</p>
+{% endif %}

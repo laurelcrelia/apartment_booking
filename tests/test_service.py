@@ -6,7 +6,8 @@ from io import StringIO
 
 from apartment_booking.cli import main
 from apartment_booking.service import (BookingError, BookingService,
-                                       NotFoundError, OverlapError)
+                                       ConflictError, NotFoundError,
+                                       OverlapError)
 from apartment_booking.storage import JsonStorage, MemoryStorage
 
 
@@ -135,6 +136,35 @@ class BookingTests(unittest.TestCase):
         self.assertEqual(len(self.svc.list_bookings(include_cancelled=True)), 2)
         self.assertEqual(len(self.svc.list_bookings(apt_id=2, include_cancelled=True)), 1)
         self.assertEqual(len(self.svc.list_bookings(guest="ann")), 1)
+
+
+class ConflictTests(unittest.TestCase):
+    """Rule violations that depend on existing data are ConflictErrors (HTTP 409)."""
+
+    def setUp(self):
+        self.svc = BookingService(MemoryStorage())
+        self.svc.add_apartment("Loft", "1 Main St")
+        self.svc.create_booking(1, "Ann", "2026-11-01", "2026-11-05")
+
+    def test_overlap_is_conflict(self):
+        with self.assertRaises(ConflictError):
+            self.svc.create_booking(1, "Bob", "2026-11-02", "2026-11-03")
+
+    def test_remove_with_active_booking_is_conflict(self):
+        with self.assertRaises(ConflictError):
+            self.svc.remove_apartment(1)
+
+    def test_cancelled_booking_conflicts(self):
+        self.svc.cancel_booking(1)
+        with self.assertRaises(ConflictError):
+            self.svc.cancel_booking(1)
+        with self.assertRaises(ConflictError):
+            self.svc.change_booking(1, guest="Bob")
+
+    def test_invalid_input_is_not_conflict(self):
+        with self.assertRaises(BookingError) as ctx:
+            self.svc.create_booking(1, "Bob", "2026-12-05", "2026-12-01")
+        self.assertNotIsInstance(ctx.exception, ConflictError)
 
 
 class SearchTests(unittest.TestCase):

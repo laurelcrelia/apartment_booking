@@ -1,14 +1,35 @@
 services:
+  web:
+    build: .
+    image: apartment-booking
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - booking-data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health')"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+
+  # Command-line interface, sharing the web app's data volume:
+  #   docker compose run --rm booking apartment list
   booking:
     build: .
     image: apartment-booking
+    entrypoint: ["python", "booking.py"]
+    command: ["--help"]
     volumes:
       - booking-data:/data
+    profiles: ["cli"]
 
   tests:
-    build: .
-    image: apartment-booking
-    entrypoint: ["python", "-m", "unittest", "-v"]
+    build:
+      context: .
+      target: test
+    image: apartment-booking:test
     profiles: ["test"]
 
 volumes:

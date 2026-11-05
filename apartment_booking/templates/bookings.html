@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}Bookings{% endblock %}
+{% block content %}
+<h1>Bookings</h1>
+
+<form class="filters" method="get" action="{{ url_for('pages.bookings') }}">
+  <label>Apartment
+    <select name="apartment_id">
+      <option value="">All</option>
+      {% for a in apartments %}
+      <option value="{{ a.id }}" {% if filters.apartment_id == a.id|string %}selected{% endif %}>{{ a.id }} · {{ a.name }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label>Guest <input name="guest" value="{{ filters.guest }}"></label>
+  <label class="check"><input type="checkbox" name="include_cancelled" value="true" {% if filters.include_cancelled %}checked{% endif %}> Show cancelled</label>
+  <button type="submit">Filter</button>
+</form>
+
+{% include "_bookings_table.html" %}
+
+<section class="card">
+  <h2>Create booking</h2>
+  {% if apartments %}
+  <form data-api="/api/bookings" data-method="POST" data-redirect="/bookings/{id}" data-flash="Booking created">
+    <label>Apartment {% with selected=None %}{% include "_apartment_select.html" %}{% endwith %}</label>
+    <label>Check-in <input type="date" name="check_in" required></label>
+    <label>Check-out <input type="date" name="check_out" required></label>
+    <label>Guest <input name="guest"></label>
+    {% include "_status.html" %}
+    <button type="submit">Create booking</button>
+  </form>
+  {% else %}
+  <p class="empty">Add an apartment first.</p>
+  {% endif %}
+</section>
+{% endblock %}

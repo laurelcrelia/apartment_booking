@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}Apartments{% endblock %}
+{% block content %}
+<h1>Apartments</h1>
+
+{% if apartments %}
+<table>
+  <thead><tr><th>ID</th><th>Name</th><th>Address</th><th>Rooms</th><th>Price / night</th></tr></thead>
+  <tbody>
+  {% for a in apartments %}
+    <tr>
+      <td>{{ a.id }}</td>
+      <td><a href="{{ url_for('pages.apartment', apartment_id=a.id) }}">{{ a.name }}</a></td>
+      <td>{{ a.address or "–" }}</td>
+      <td>{{ a.rooms }}</td>
+      <td>{{ "%.2f"|format(a.price) }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="empty">No apartments yet. Add one below.</p>
+{% endif %}
+
+<div class="cards">
+  <section class="card">
+    <h2>Search availability</h2>
+    <form data-api="/api/apartments" data-method="GET" data-render="search-results">
+      <label>Check-in <input type="date" name="from" required></label>
+      <label>Check-out <input type="date" name="to" required></label>
+      <label>Minimum rooms <input type="number" name="min_rooms" min="1" step="1" value="1" data-type="int"></label>
+      {% include "_status.html" %}
+      <button type="submit">Search</button>
+    </form>
+    <div id="search-results" aria-live="polite"></div>
+  </section>
+
+  <section class="card">
+    <h2>Add apartment</h2>
+    <form data-api="/api/apartments" data-method="POST" data-redirect="/apartments/{id}" data-flash="Apartment added">
+      <label>Name <input name="name" required></label>
+      <label>Address <input name="address" required></label>
+      <label>Rooms <input type="number" name="rooms" min="1" step="1" value="1" data-type="int"></label>
+      <label>Price per night <input type="number" name="price" min="0" step="0.01" value="0" data-type="number"></label>
+      {% include "_status.html" %}
+      <button type="submit">Add apartment</button>
+    </form>
+  </section>
+</div>
+{% endblock %}

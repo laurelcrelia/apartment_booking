@@ -9,3 +9,8 @@ documentation/
 Dockerfile
 .dockerignore
 compose.yaml
+.github/
+scripts/
+.coverage
+htmlcov/
+README.md
