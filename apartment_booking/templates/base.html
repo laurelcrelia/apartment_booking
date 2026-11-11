@@ -4,21 +4,41 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}{% endblock %} · Apartment Booking</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap">
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
   <script src="{{ url_for('static', filename='app.js') }}" defer></script>
 </head>
 <body>
-  <header>
+  {% set section = request.endpoint.split('.')[-1] if request.endpoint else '' %}
+  <header class="topbar">
     <nav>
-      <a class="brand" href="{{ url_for('pages.apartments') }}">Apartment Booking</a>
-      <a href="{{ url_for('pages.apartments') }}">Apartments</a>
-      <a href="{{ url_for('pages.bookings') }}">Bookings</a>
-      <a href="{{ url_for('pages.api_docs') }}">API</a>
+      <a class="brand" href="{{ url_for('pages.apartments') }}"><span class="brand-mark" aria-hidden="true">AB</span><span class="brand-text">Apartment Booking</span></a>
+      <a href="{{ url_for('pages.apartments') }}" {% if section in ('apartments', 'apartment') %}aria-current="page"{% endif %}>Apartments</a>
+      <a href="{{ url_for('pages.bookings') }}" {% if section in ('bookings', 'booking') %}aria-current="page"{% endif %}>Bookings</a>
+      <a href="{{ url_for('pages.api_docs') }}">API docs <span class="tag">v1</span></a>
     </nav>
   </header>
   <main>
-    <p id="flash" class="notice success" role="status" hidden></p>
     {% block content %}{% endblock %}
   </main>
+  <footer><p>Apartment Booking · Continuous Integration and Delivery course project, unibz</p></footer>
+
+  <div id="flash" class="toast" role="status" aria-live="polite" hidden>
+    <div><strong>Done</strong><span data-message></span></div>
+    <button type="button" aria-label="Dismiss" data-dismiss>×</button>
+  </div>
+
+  <dialog id="confirm-dialog" aria-labelledby="confirm-title">
+    <form method="dialog">
+      <h2 id="confirm-title">Are you sure?</h2>
+      <p data-message></p>
+      <div class="actions">
+        <button value="cancel" class="secondary">Keep it</button>
+        <button value="ok" class="danger solid" data-ok>Confirm</button>
+      </div>
+    </form>
+  </dialog>
 </body>
 </html>

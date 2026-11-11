@@ -1,19 +1,46 @@
+{# Expects `bookings`. Pass `apartments_by_id` to show an apartment column and totals per apartment,
+   or `apartment` when every booking belongs to that one apartment. #}
 {% if bookings %}
-<table>
-  <thead><tr><th>ID</th><th>Apartment</th><th>Guest</th><th>Check-in</th><th>Check-out</th><th>Status</th></tr></thead>
-  <tbody>
-  {% for b in bookings %}
-    <tr class="{{ b.status }}">
-      <td><a href="{{ url_for('pages.booking', booking_id=b.id) }}">{{ b.id }}</a></td>
-      <td><a href="{{ url_for('pages.apartment', apartment_id=b.apartment_id) }}">{{ b.apartment_id }}</a></td>
-      <td>{{ b.guest or "–" }}</td>
-      <td>{{ b.check_in }}</td>
-      <td>{{ b.check_out }}</td>
-      <td><span class="badge {{ b.status }}">{{ b.status }}</span></td>
-    </tr>
-  {% endfor %}
-  </tbody>
-</table>
+<div class="table-wrap">
+  <table>
+    <thead><tr>
+      <th>Booking</th>
+      {% if apartments_by_id %}<th>Apartment</th>{% endif %}
+      <th>Guest</th><th>Dates &amp; stay</th><th class="num">Est. total</th><th>Status</th>
+      <th><span class="visually-hidden">Action</span></th>
+    </tr></thead>
+    <tbody>
+    {% for b in bookings %}
+      {% set apt = apartments_by_id[b.apartment_id] if apartments_by_id else apartment %}
+      <tr class="{{ b.status }}">
+        <td><a class="primary num" href="{{ url_for('pages.booking', booking_id=b.id) }}">#{{ b.id }}</a></td>
+        {% if apartments_by_id %}
+        <td>
+          <div class="with-avatar">
+            <span class="avatar" aria-hidden="true">{{ apt.name|initials }}</span>
+            <div>
+              <a class="primary" href="{{ url_for('pages.apartment', apartment_id=apt.id) }}">{{ apt.name }}</a>
+              <span class="secondary">{{ apt.rooms }} room{{ "s" if apt.rooms != 1 }}</span>
+            </div>
+          </div>
+        </td>
+        {% endif %}
+        <td><span class="primary">{{ b.guest or "No guest name" }}</span></td>
+        <td>
+          <span class="primary num">{{ b.check_in|nice_date }} → {{ b.check_out|nice_date }}</span>
+          <span class="secondary">{{ b|nights }} night{{ "s" if (b|nights) != 1 }}</span>
+        </td>
+        <td class="num">
+          <span class="primary">{{ (apt.price * (b|nights))|money }}</span>
+          <span class="secondary">{{ apt.price|money }}/night</span>
+        </td>
+        <td><span class="badge {{ b.status }}">{{ b.status }}</span></td>
+        <td><a class="row-link" href="{{ url_for('pages.booking', booking_id=b.id) }}">{{ "Manage" if b.status == "active" else "View" }}</a></td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
 {% else %}
-<p class="empty">No bookings.</p>
+<div class="empty-state"><h3>No bookings.</h3><p>{{ empty_hint|default("Bookings you create will show up here.") }}</p></div>
 {% endif %}

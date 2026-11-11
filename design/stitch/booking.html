@@ -1,0 +1,305 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta content="width=device-width, initial-scale=1.0" name="viewport"><meta content="web_standard" name="shell-type"><title>Apartment Booking</title><link href="https://fonts.googleapis.com" rel="preconnect"><link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=Plus+Jakarta+Sans:wght@400;500;600;700&amp;display=swap" rel="stylesheet"><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"><style>@layer base{html,body{margin:0;padding:0;}body{overscroll-behavior:none;}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config={darkMode:"class",theme:{extend:{colors:{"inverse-on-surface":"#eef0ff","surface-container-low":"#f2f3ff","surface-bright":"#faf8ff","surface-container":"#eaedff","error-container":"#ffdad6","primary":"#00288e","error":"#ba1a1a","on-secondary":"#ffffff","on-tertiary-fixed-variant":"#802a00","secondary-container":"#86f2e4","surface-container-lowest":"#ffffff","inverse-surface":"#283044","on-error":"#ffffff","tertiary-container":"#872d00","background":"#faf8ff","on-primary-fixed":"#001453","on-surface-variant":"#444653","surface-container-high":"#e2e7ff","on-tertiary":"#ffffff","inverse-primary":"#b8c4ff","primary-fixed":"#dde1ff","surface":"#faf8ff","surface-container-highest":"#dae2fd","tertiary-fixed-dim":"#ffb59a","on-secondary-fixed":"#00201d","on-background":"#131b2e","outline":"#757684","primary-container":"#1e40af","on-secondary-container":"#006f66","surface-tint":"#3755c3","on-primary-container":"#a8b8ff","secondary-fixed-dim":"#6bd8cb","on-tertiary-fixed":"#380d00","on-surface":"#131b2e","secondary":"#006a61","on-primary":"#ffffff","surface-dim":"#d2d9f4","on-secondary-fixed-variant":"#005049","tertiary":"#611e00","on-tertiary-container":"#ffa583","on-error-container":"#93000a","outline-variant":"#c4c5d5","on-primary-fixed-variant":"#173bab","surface-variant":"#dae2fd","secondary-fixed":"#89f5e7","tertiary-fixed":"#ffdbce","primary-fixed-dim":"#b8c4ff"},borderRadius:{DEFAULT:"0.25rem",lg:"0.5rem",xl:"0.75rem",full:"9999px"},spacing:{"margin-compact":"1rem","space-sm":"0.5rem","space-xl":"2.5rem",gutter:"1.5rem","space-md":"1rem",margin:"2rem","space-lg":"1.5rem","space-xs":"0.25rem","gutter-compact":"0.75rem"},fontFamily:{"body-lg":["Plus Jakarta Sans"],"label-sm":["Inter"],display:["Plus Jakarta Sans"],"body-sm":["Plus Jakarta Sans"],"body-md":["Plus Jakarta Sans"],"headline-lg":["Plus Jakarta Sans"],"label-lg":["Inter"],"label-md":["Inter"],"headline-md":["Plus Jakarta Sans"],"headline-sm":["Plus Jakarta Sans"]},fontSize:{"body-lg":["16px",{lineHeight:"24px",fontWeight:"400"}],"label-sm":["11px",{lineHeight:"14px",letterSpacing:"0.04em",fontWeight:"600"}],display:["36px",{lineHeight:"44px",letterSpacing:"-0.02em",fontWeight:"600"}],"body-sm":["13px",{lineHeight:"18px",fontWeight:"400"}],"body-md":["14px",{lineHeight:"20px",fontWeight:"400"}],"headline-lg":["28px",{lineHeight:"36px",letterSpacing:"-0.02em",fontWeight:"600"}],"label-lg":["14px",{lineHeight:"20px",letterSpacing:"0.01em",fontWeight:"500"}],"label-md":["12px",{lineHeight:"16px",letterSpacing:"0.02em",fontWeight:"500"}],"headline-md":["22px",{lineHeight:"28px",letterSpacing:"-0.01em",fontWeight:"600"}],"headline-sm":["18px",{lineHeight:"24px",letterSpacing:"-0.01em",fontWeight:"600"}]}}}};</script></head><body class="bg-surface font-body-md text-body-md text-on-surface min-h-screen"><header class="fixed top-0 left-0 right-0 z-50 bg-surface-container-lowest/95 backdrop-blur-md shadow-[0_1px_8px_rgba(0,0,0,0.04)]"><div class="h-16 max-w-7xl mx-auto px-6 lg:px-12 flex items-center justify-between"><div class="flex items-center gap-space-xl"><div class="flex items-center gap-space-sm"><img alt="Apartment Booking Logo" class="h-8 w-auto object-contain" src="https://lh3.googleusercontent.com/aida/ALJJyrDintWBGFkF9X8l3pk74ucbSdzyox0UEzIY0Q_qw4EfFhCdUHfVSiP-d0A-7F3X0ny1J4bRszoPgHnPzspXzQqksPdJHww_5-kRyyhQ531M543shqt8CdeQlu5-MqHIPmQj-3zRGnEeCXRgoAdeQBjEI2gSdzYW29yFSlRIC2pupiIYptlx_RpFswoxTJKHnTFkuqCMNbAmYqhTAx7_T-F_hB7ax5vULPo3lrkHhzQ"><span class="font-headline-sm text-headline-sm text-primary font-bold tracking-tight">Apartment Booking</span></div><nav class="flex items-center gap-space-lg" data-active-classes="text-primary font-bold border-b-2 border-primary"><a class="h-16 inline-flex items-center text-on-surface-variant font-label-lg text-label-lg hover:text-on-surface transition-colors" data-path="apartments" href="#">Apartments</a><a aria-current="page" class="h-16 inline-flex items-center transition-colors text-primary font-bold border-b-2 border-primary" data-path="bookings" href="#">Bookings</a><a class="h-16 inline-flex items-center gap-space-xs text-on-surface-variant font-label-lg text-label-lg hover:text-on-surface transition-colors" data-path="api-docs" href="#"><span>API docs</span><span class="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-surface-container-high text-on-surface-variant">v1</span></a></nav></div><div class="flex items-center gap-space-lg"><div class="hidden sm:flex items-center gap-space-xs px-2.5 py-1 rounded-full bg-surface-container-low"><span class="w-2 h-2 rounded-full bg-secondary"></span><span class="font-label-sm text-label-sm text-secondary font-semibold uppercase tracking-wider">Live Database</span></div></div></div></header><main class="w-full pt-16 bg-surface"><div class="flex flex-col w-full">
+<div class="max-w-7xl mx-auto w-full px-6 lg:px-12 py-space-xl">
+<!-- Top Action / Context Row & Breadcrumb -->
+<div class="flex flex-col md:flex-row md:items-center justify-between gap-space-md mb-space-lg">
+<div class="flex flex-col gap-space-xs">
+<nav aria-label="Breadcrumb" class="flex items-center gap-2 font-label-md text-label-md text-on-surface-variant">
+<a class="hover:text-primary transition-colors" href="#">Bookings</a>
+<span class="material-symbols-outlined text-[14px] text-outline">chevron_right</span>
+<span class="text-on-surface font-semibold">#BK-4091</span>
+</nav>
+<div class="flex items-center gap-space-md mt-1">
+<h1 class="font-headline-lg text-headline-lg text-on-surface tracking-tight font-bold">Booking #BK-4091</h1>
+<span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-secondary-container text-on-secondary-container font-label-sm text-label-sm font-semibold shadow-sm">
+<span class="w-2 h-2 rounded-full bg-secondary"></span>
+            Active Booking
+          </span>
+</div>
+</div>
+
+</div>
+<!-- Prominent Status Banner & Metric Ticker -->
+<div class="rounded-xl bg-surface-container-lowest p-space-lg shadow-md mb-space-xl relative overflow-hidden">
+<div class="absolute -right-12 -top-12 w-64 h-64 rounded-full bg-secondary/5 blur-2xl pointer-events-none"></div>
+<div class="flex flex-col lg:flex-row lg:items-center justify-between gap-space-lg relative z-10">
+<div class="flex items-start gap-space-md">
+<div class="w-12 h-12 rounded-xl bg-secondary/10 flex items-center justify-center text-secondary shrink-0">
+<span class="material-symbols-outlined text-[28px]" style="font-variation-settings: 'FILL' 1;">domain</span>
+</div>
+<div>
+<div class="flex items-center gap-2">
+<span class="font-headline-sm text-headline-sm text-on-surface font-bold">Canal Loft Suite</span>
+<span class="font-label-sm text-label-sm uppercase tracking-wider text-secondary font-semibold bg-secondary-container/40 px-2 py-0.5 rounded">Floor 3 · #302</span>
+</div>
+<p class="font-body-md text-body-md text-on-surface-variant mt-0.5">
+              Confirmed for Canal Loft Suite · Check-in in 24 days (Wednesday, Nov 12, 2025)
+            </p>
+</div>
+</div>
+<div class="grid grid-cols-1 gap-space-md lg:gap-space-xl pt-space-md lg:pt-0 sm:grid-cols-2">
+<div class="flex flex-col">
+<span class="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">Stay Length</span>
+<span class="font-headline-sm text-headline-sm text-on-surface font-bold mt-0.5">5 Nights</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">Check-out exclusive</span>
+</div>
+<div class="flex flex-col">
+<span class="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">Total Value</span>
+<span class="font-headline-sm text-headline-sm text-primary font-bold mt-0.5">€1,200.00</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">€240.00 / night net</span>
+</div>
+
+</div>
+</div>
+</div>
+<!-- Main Grid Content: 7 Columns / 5 Columns -->
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-gutter items-start">
+<!-- Left Column (7 cols): Active Form & Cancelled Comparison -->
+<div class="lg:col-span-7 flex flex-col gap-space-xl">
+<!-- Primary Card: Booking Information & Modifications -->
+<section class="rounded-xl bg-surface-container-lowest p-space-lg sm:p-space-xl shadow-md">
+<div class="flex items-start justify-between gap-space-md pb-space-md">
+<div>
+<h2 class="font-headline-sm text-headline-sm text-on-surface font-bold">Booking Information &amp; Modifications</h2>
+<p class="font-body-md text-body-md text-on-surface-variant mt-1">
+                Update reservation dates, change apartment allocation, or update guest details.
+              </p>
+</div>
+<span class="material-symbols-outlined text-outline">tune</span>
+</div>
+<!-- Mod Form -->
+<form class="flex flex-col gap-space-lg mt-space-md" onsubmit="event.preventDefault();">
+<!-- Apartment Allocation -->
+<div class="flex flex-col gap-1.5">
+<label class="font-label-md text-label-md text-on-surface font-semibold" for="apartment-select">
+                Apartment Allocation
+              </label>
+<div class="relative">
+<select class="w-full appearance-none h-11 px-3.5 pr-10 rounded-lg bg-surface-container-low text-on-surface font-body-md text-body-md shadow-sm focus:outline-none focus:ring-2 focus:ring-primary/40 cursor-pointer" id="apartment-select">
+<option selected="" value="canal-loft">Canal Loft Suite (€240/night) — 72m² Canal View</option>
+<option value="prince-penthouse">Prinsengracht Penthouse (€410/night) — 110m²</option>
+<option value="keizers-studio">Keizersgracht Heritage Studio (€195/night) — 48m²</option>
+<option value="heren-terrace">Herengracht Garden Terrace (€285/night) — 85m²</option>
+</select>
+<span class="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 text-outline pointer-events-none">expand_more</span>
+</div>
+</div>
+<!-- Guest Name -->
+<div class="flex flex-col gap-1.5">
+<div class="flex items-center justify-between">
+<label class="font-label-md text-label-md text-on-surface font-semibold" for="guest-name">Primary Guest Name</label>
+
+</div>
+<input class="w-full h-11 px-3.5 rounded-lg bg-surface-container-low text-on-surface font-body-md text-body-md shadow-sm focus:outline-none focus:ring-2 focus:ring-primary/40" id="guest-name" type="text" value="Sarah Jenkins">
+</div>
+<!-- Dates Row -->
+<div class="grid grid-cols-1 sm:grid-cols-2 gap-space-md">
+<div class="flex flex-col gap-1.5">
+<label class="font-label-md text-label-md text-on-surface font-semibold" for="checkin-date">Check-in Date</label>
+<div class="relative">
+<input class="w-full h-11 px-3.5 pr-10 rounded-lg bg-surface-container-low text-on-surface font-body-md text-body-md shadow-sm focus:outline-none focus:ring-2 focus:ring-primary/40" id="checkin-date" type="date" value="2025-11-12">
+<span class="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 text-outline pointer-events-none text-[20px]">calendar_today</span>
+</div>
+<span class="font-label-sm text-label-sm text-on-surface-variant">Check-in from 15:00 CET</span>
+</div>
+<div class="flex flex-col gap-1.5">
+<label class="font-label-md text-label-md text-on-surface font-semibold" for="checkout-date">Check-out Date</label>
+<div class="relative">
+<input class="w-full h-11 px-3.5 pr-10 rounded-lg bg-surface-container-low text-on-surface font-body-md text-body-md shadow-sm focus:outline-none focus:ring-2 focus:ring-primary/40" id="checkout-date" type="date" value="2025-11-17">
+<span class="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 text-outline pointer-events-none text-[20px]">event_available</span>
+</div>
+<span class="font-label-sm text-label-sm text-on-surface-variant">Check-out before 11:00 CET</span>
+</div>
+</div>
+<!-- Stay Summary & Pricing Computation Card -->
+<div class="p-space-md rounded-lg bg-surface-container-low flex flex-col gap-space-sm">
+<div class="flex items-center justify-between text-body-md font-body-md">
+
+
+</div>
+<div class="flex items-center justify-between text-body-sm font-body-sm text-on-surface-variant">
+
+
+</div>
+<div class="flex items-center justify-between text-body-sm font-body-sm text-on-surface-variant">
+
+
+</div>
+<div class="flex items-center justify-between pt-2 text-headline-sm font-headline-sm font-bold text-on-surface">
+
+
+</div>
+</div>
+<!-- INLINE SERVER ERROR PREVIEW -->
+<div class="rounded-xl bg-error-container p-space-md flex items-start gap-space-md shadow-sm animate-pulse">
+<div class="w-9 h-9 rounded-lg bg-error/10 flex items-center justify-center shrink-0 text-error">
+<span class="material-symbols-outlined text-[22px]">warning</span>
+</div>
+<div class="flex flex-col gap-1">
+<span class="font-label-lg text-label-lg font-bold text-on-error-container">
+                  Booking Conflict Detected
+                </span>
+<p class="font-body-md text-body-md text-on-error-container leading-relaxed">
+                  These dates overlap an existing booking for <strong>Canal Loft Suite</strong> (Booking <span class="underline font-semibold cursor-pointer">#BK-3882</span>: Nov 14 – Nov 19, 2025). Please adjust dates or reassign the apartment to proceed.
+                </p>
+</div>
+</div>
+<!-- Actions Row -->
+<div class="flex flex-wrap items-center justify-between gap-space-md pt-space-xs">
+<div class="flex items-center gap-space-sm">
+<button class="px-5 py-2.5 rounded-lg bg-primary hover:bg-primary-container text-on-primary font-label-lg text-label-lg font-semibold shadow-md active:scale-95 transition-all" type="button">
+                  Save Changes
+                </button>
+<button class="px-5 py-2.5 rounded-lg bg-surface-container-high hover:bg-surface-container-highest text-on-surface font-label-lg text-label-lg font-medium shadow-sm transition-colors" type="button">
+                  Reset to Original
+                </button>
+</div>
+
+</div>
+</form>
+</section>
+<!-- Read-Only Cancelled Booking Comparison View -->
+<section class="rounded-xl bg-surface-container-lowest p-space-lg sm:p-space-xl shadow-sm opacity-90">
+<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-space-sm pb-space-md">
+<div class="flex items-center gap-space-sm">
+<span class="material-symbols-outlined text-outline text-[22px]">history_toggle_off</span>
+<h3 class="font-headline-sm text-headline-sm text-on-surface font-bold">
+                Comparison: Cancelled Booking State (#BK-3104)
+              </h3>
+</div>
+<span class="self-start sm:self-auto inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-surface-container-high text-on-surface-variant font-label-sm text-label-sm font-semibold">
+<span class="w-2 h-2 rounded-full bg-outline"></span>
+              Cancelled
+            </span>
+</div>
+<!-- Lock info banner -->
+<div class="rounded-lg bg-surface-container-low p-space-md flex items-center gap-space-md mb-space-lg">
+<span class="material-symbols-outlined text-outline text-[24px]">lock</span>
+<p class="font-body-md text-body-md text-on-surface-variant">
+              This booking was cancelled on <strong>Sep 28, 2025</strong> by Guest Request. All fields are locked and read-only.
+            </p>
+</div>
+<!-- Locked form sample -->
+<div class="grid grid-cols-1 sm:grid-cols-2 gap-space-md opacity-70 cursor-not-allowed">
+<div class="flex flex-col gap-1">
+<span class="font-label-sm text-label-sm text-on-surface-variant">Apartment</span>
+<div class="h-10 px-3 rounded-lg bg-surface-container flex items-center text-body-md font-body-md text-on-surface">
+                Prinsengracht Penthouse
+              </div>
+</div>
+<div class="flex flex-col gap-1">
+<span class="font-label-sm text-label-sm text-on-surface-variant">Guest Name</span>
+<div class="h-10 px-3 rounded-lg bg-surface-container flex items-center text-body-md font-body-md text-on-surface">
+                Marcus Aurelius Vance
+              </div>
+</div>
+<div class="flex flex-col gap-1">
+<span class="font-label-sm text-label-sm text-on-surface-variant">Reserved Range</span>
+<div class="h-10 px-3 rounded-lg bg-surface-container flex items-center text-body-md font-body-md text-on-surface">
+                Oct 10, 2025 – Oct 14, 2025 (4 nights)
+              </div>
+</div>
+<div class="flex flex-col gap-1">
+<span class="font-label-sm text-label-sm text-on-surface-variant">Settled Total</span>
+<div class="h-10 px-3 rounded-lg bg-surface-container flex items-center text-body-md font-body-md text-on-surface">
+                €0.00 (Refunded in full)
+              </div>
+</div>
+</div>
+<div class="mt-space-md pt-space-sm flex items-center justify-end">
+<span class="font-label-sm text-label-sm text-outline italic">No modification actions available in cancelled state</span>
+</div>
+</section>
+</div>
+<!-- Right Column (5 cols): Actions, Guest Details, Audit Log -->
+<div class="lg:col-span-5 flex flex-col gap-space-xl">
+<!-- Danger Card: Cancellation & Actions -->
+<section class="rounded-xl bg-surface-container-lowest p-space-lg shadow-md">
+<div class="flex items-center gap-space-sm pb-space-sm">
+<div class="w-8 h-8 rounded-lg bg-error-container flex items-center justify-center text-error">
+<span class="material-symbols-outlined text-[20px]">cancel</span>
+</div>
+<h3 class="font-headline-sm text-headline-sm text-error font-bold">Cancel Booking</h3>
+</div>
+<p class="font-body-md text-body-md text-on-surface-variant mt-2">
+            Cancelling this booking will immediately release the dates for Canal Loft Suite and make them available for new inquiries.
+          </p>
+<div class="mt-space-md p-space-md rounded-lg bg-surface-container-low flex items-start gap-space-sm">
+<span class="material-symbols-outlined text-outline text-[18px] shrink-0 mt-0.5">info</span>
+<p class="font-body-sm text-body-sm text-on-surface-variant">
+              This action marks the reservation as <strong>Cancelled</strong>. Booking records are preserved for accounting and audit history.
+            </p>
+</div>
+<div class="mt-space-lg">
+<button class="w-full py-2.5 px-4 rounded-lg bg-error text-on-error hover:opacity-90 font-label-lg text-label-lg font-semibold shadow-md active:scale-95 transition-all flex items-center justify-center gap-2" onclick="document.getElementById('cancel-modal').classList.remove('hidden')" type="button">
+<span class="material-symbols-outlined text-[18px]">event_busy</span>
+<span>Cancel Booking</span>
+</button>
+</div>
+</section>
+<!-- Guest & Stay Summary -->
+<section class="rounded-xl bg-surface-container-lowest p-space-lg shadow-md flex flex-col gap-space-lg">
+<div>
+<span class="font-label-sm text-label-sm uppercase tracking-wider text-on-surface-variant font-semibold">Guest Profile</span>
+<div class="flex items-center gap-space-md mt-space-sm">
+<div class="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-lg">
+                SJ
+              </div>
+<div class="flex flex-col">
+<span class="font-headline-sm text-headline-sm text-on-surface font-bold leading-tight">Sarah Jenkins</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">sarah.jenkins@concierge-guest.com</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">+31 6 8492 1039</span>
+</div>
+</div>
+</div>
+
+<!-- Unit Preview Photo snippet -->
+
+<!-- Audit Log Trail -->
+
+</section>
+</div>
+</div>
+</div>
+<!-- FLOATING SUCCESS TOAST NOTIFICATION -->
+<aside aria-label="Notifications" class="fixed bottom-6 right-6 z-50 max-w-sm w-full bg-surface-container-lowest rounded-xl shadow-xl p-space-md flex items-center justify-between gap-space-md transform transition-all duration-300">
+<div class="flex items-center gap-space-sm">
+<div class="w-8 h-8 rounded-full bg-secondary-container flex items-center justify-center text-secondary shrink-0">
+<span class="material-symbols-outlined text-[18px]">check_circle</span>
+</div>
+<div class="flex flex-col">
+<span class="font-label-lg text-label-lg font-bold text-on-surface">Saved</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">Reservation details saved successfully</span>
+</div>
+</div>
+<button aria-label="Dismiss toast" class="text-outline hover:text-on-surface transition-colors p-1 rounded-full" onclick="this.closest('aside').remove()" type="button">
+<span class="material-symbols-outlined text-[18px]">close</span>
+</button>
+</aside>
+<!-- CANCEL CONFIRMATION MODAL -->
+<div class="fixed inset-0 z-50 bg-inverse-surface/40 backdrop-blur-sm flex items-center justify-center p-4 hidden" id="cancel-modal">
+<div class="bg-surface-container-lowest rounded-xl max-w-md w-full p-space-xl shadow-xl flex flex-col gap-space-md">
+<div class="w-12 h-12 rounded-xl bg-error-container text-error flex items-center justify-center">
+<span class="material-symbols-outlined text-[28px]">warning</span>
+</div>
+<div>
+<h4 class="font-headline-sm text-headline-sm font-bold text-on-surface">Confirm Cancellation</h4>
+<p class="font-body-md text-body-md text-on-surface-variant mt-1">
+          Are you sure you want to cancel booking <strong>#BK-4091</strong> for Sarah Jenkins? The dates for <strong>Canal Loft Suite</strong> (Nov 12 – Nov 17) will be released immediately.
+        </p>
+</div>
+<div class="flex items-center justify-end gap-space-sm pt-space-sm">
+<button class="px-4 py-2 rounded-lg bg-surface-container-high hover:bg-surface-container-highest text-on-surface font-label-lg text-label-lg font-medium transition-colors" onclick="document.getElementById('cancel-modal').classList.add('hidden')" type="button">
+          Dismiss
+        </button>
+<button class="px-4 py-2 rounded-lg bg-error hover:opacity-90 text-on-error font-label-lg text-label-lg font-semibold transition-colors" onclick="document.getElementById('cancel-modal').classList.add('hidden')" type="button">
+          Confirm Cancellation
+        </button>
+</div>
+</div>
+</div>
+</div></main><footer class="w-full bg-surface-container-low shadow-[0_-1px_6px_rgba(0,0,0,0.02)] mt-space-xl"><div class="max-w-7xl mx-auto px-6 lg:px-12 py-space-lg flex flex-col sm:flex-row items-center justify-between gap-space-sm font-label-md text-label-md text-on-surface-variant"><div>© 2024 Apartment Booking Management Inc. All rights reserved.</div><div class="flex items-center gap-space-md"><span class="hover:text-on-surface transition-colors cursor-pointer">Operational Status</span><span class="hover:text-on-surface transition-colors cursor-pointer">Concierge Support</span><span class="hover:text-on-surface transition-colors cursor-pointer">Privacy Policy</span></div></div></footer>
+
+
+
+</body></html>

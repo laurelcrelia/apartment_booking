@@ -1,50 +1,116 @@
 {% extends "base.html" %}
 {% block title %}Apartments{% endblock %}
 {% block content %}
-<h1>Apartments</h1>
+{% set active_total = active_counts.values()|sum %}
+<header class="page-head">
+  <div>
+    <span class="eyebrow">Portfolio</span>
+    <h1>Apartments</h1>
+    <p class="lead">Manage your apartments and nightly rates, and check availability for any stay.</p>
+  </div>
+  <div class="chips">
+    <span class="chip"><span class="dot accent"></span>{{ apartments|length }} apartment{{ "s" if apartments|length != 1 }}</span>
+    <span class="chip"><span class="dot ok"></span>{{ active_total }} active booking{{ "s" if active_total != 1 }}</span>
+  </div>
+</header>
 
-{% if apartments %}
-<table>
-  <thead><tr><th>ID</th><th>Name</th><th>Address</th><th>Rooms</th><th>Price / night</th></tr></thead>
-  <tbody>
-  {% for a in apartments %}
-    <tr>
-      <td>{{ a.id }}</td>
-      <td><a href="{{ url_for('pages.apartment', apartment_id=a.id) }}">{{ a.name }}</a></td>
-      <td>{{ a.address or "–" }}</td>
-      <td>{{ a.rooms }}</td>
-      <td>{{ "%.2f"|format(a.price) }}</td>
-    </tr>
-  {% endfor %}
-  </tbody>
-</table>
-{% else %}
-<p class="empty">No apartments yet. Add one below.</p>
-{% endif %}
-
-<div class="cards">
-  <section class="card">
-    <h2>Search availability</h2>
-    <form data-api="/api/apartments" data-method="GET" data-render="search-results">
-      <label>Check-in <input type="date" name="from" required></label>
-      <label>Check-out <input type="date" name="to" required></label>
-      <label>Minimum rooms <input type="number" name="min_rooms" min="1" step="1" value="1" data-type="int"></label>
-      {% include "_status.html" %}
-      <button type="submit">Search</button>
-    </form>
-    <div id="search-results" aria-live="polite"></div>
+<div class="split">
+  <section class="stack">
+    <div class="card flush">
+      <div class="card-head">
+        <div>
+          <h2>Registered apartments</h2>
+          <p>Nightly rates, room counts and active bookings</p>
+        </div>
+        <span class="count">{{ apartments|length }} total</span>
+      </div>
+      {% if apartments %}
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Apartment</th><th>Address</th><th class="num">Rooms</th><th class="num">Rate / night</th><th>Bookings</th><th><span class="visually-hidden">Action</span></th></tr></thead>
+          <tbody>
+          {% for a in apartments %}
+            {% set n = active_counts.get(a.id, 0) %}
+            <tr>
+              <td>
+                <a class="primary" href="{{ url_for('pages.apartment', apartment_id=a.id) }}">{{ a.name }}</a>
+                <span class="secondary">ID {{ a.id }}</span>
+              </td>
+              <td>{{ a.address or "–" }}</td>
+              <td class="num">{{ a.rooms }}</td>
+              <td class="num">{{ a.price|money }}</td>
+              <td><span class="badge {{ 'active' if n }}">{{ n }} active</span></td>
+              <td><a class="row-link" href="{{ url_for('pages.apartment', apartment_id=a.id) }}">Details</a></td>
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div class="empty-state">
+        <h3>No apartments yet.</h3>
+        <p>Add an apartment to start taking bookings.</p>
+        <a class="button" href="#add-apartment">Add first apartment</a>
+      </div>
+      {% endif %}
+    </div>
   </section>
 
-  <section class="card">
-    <h2>Add apartment</h2>
-    <form data-api="/api/apartments" data-method="POST" data-redirect="/apartments/{id}" data-flash="Apartment added">
-      <label>Name <input name="name" required></label>
-      <label>Address <input name="address" required></label>
-      <label>Rooms <input type="number" name="rooms" min="1" step="1" value="1" data-type="int"></label>
-      <label>Price per night <input type="number" name="price" min="0" step="0.01" value="0" data-type="number"></label>
-      {% include "_status.html" %}
-      <button type="submit">Add apartment</button>
-    </form>
+  <section class="stack">
+    <div class="card">
+      <div class="card-head">
+        <div>
+          <span class="eyebrow">Inventory search</span>
+          <h2>Search availability</h2>
+          <p>Find apartments that are free for every night of a stay</p>
+        </div>
+      </div>
+      <form data-api="/api/apartments" data-method="GET" data-render="search-results" data-nights>
+        <div class="row">
+          <div class="field"><label for="search-from">Check-in</label><input id="search-from" type="date" name="from" required></div>
+          <div class="field"><label for="search-to">Check-out</label><input id="search-to" type="date" name="to" required></div>
+        </div>
+        <p class="help" data-nights-label style="margin:-0.5rem 0 1rem">Check-out is exclusive.</p>
+        <div class="field">
+          <label for="search-rooms">Minimum rooms</label>
+          <input id="search-rooms" type="number" name="min_rooms" min="1" step="1" value="1" data-type="int">
+        </div>
+        {% include "_status.html" %}
+        <button type="submit" class="block">Check availability</button>
+      </form>
+      <div id="search-results" aria-live="polite"></div>
+    </div>
+
+    <div class="card" id="add-apartment">
+      <div class="card-head">
+        <div>
+          <span class="eyebrow">New apartment</span>
+          <h2>Add apartment</h2>
+          <p>Register an apartment with its nightly rate</p>
+        </div>
+      </div>
+      <form data-api="/api/apartments" data-method="POST" data-redirect="/apartments/{id}" data-flash="Apartment added">
+        <div class="field"><label for="new-name">Name</label><input id="new-name" name="name" placeholder="e.g. Skyline Terrace 4B" required></div>
+        <div class="field"><label for="new-address">Address</label><input id="new-address" name="address" placeholder="e.g. Via Museo 18, Bolzano" required></div>
+        <div class="row">
+          <div class="field">
+            <label for="new-rooms">Rooms</label>
+            <input id="new-rooms" type="number" name="rooms" min="1" step="1" value="1" data-type="int">
+            <span class="help">At least 1</span>
+          </div>
+          <div class="field">
+            <label for="new-price">Price per night</label>
+            <div class="prefix"><span>€</span><input id="new-price" type="number" name="price" min="0" step="0.01" value="0" data-type="number"></div>
+            <span class="help">€0 or more</span>
+          </div>
+        </div>
+        {% include "_status.html" %}
+        <div class="actions">
+          <button type="reset" class="secondary">Reset</button>
+          <button type="submit">Add apartment</button>
+        </div>
+      </form>
+    </div>
   </section>
 </div>
 {% endblock %}

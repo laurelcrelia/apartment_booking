@@ -1,0 +1,549 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta content="width=device-width, initial-scale=1.0" name="viewport"><meta content="web_standard" name="shell-type"><title>Apartment Booking</title><link href="https://fonts.googleapis.com" rel="preconnect"><link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=Plus+Jakarta+Sans:wght@400;500;600;700&amp;display=swap" rel="stylesheet"><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"><style>@layer base{html,body{margin:0;padding:0;}body{overscroll-behavior:none;}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config={darkMode:"class",theme:{extend:{colors:{"inverse-on-surface":"#eef0ff","surface-container-low":"#f2f3ff","surface-bright":"#faf8ff","surface-container":"#eaedff","error-container":"#ffdad6","primary":"#00288e","error":"#ba1a1a","on-secondary":"#ffffff","on-tertiary-fixed-variant":"#802a00","secondary-container":"#86f2e4","surface-container-lowest":"#ffffff","inverse-surface":"#283044","on-error":"#ffffff","tertiary-container":"#872d00","background":"#faf8ff","on-primary-fixed":"#001453","on-surface-variant":"#444653","surface-container-high":"#e2e7ff","on-tertiary":"#ffffff","inverse-primary":"#b8c4ff","primary-fixed":"#dde1ff","surface":"#faf8ff","surface-container-highest":"#dae2fd","tertiary-fixed-dim":"#ffb59a","on-secondary-fixed":"#00201d","on-background":"#131b2e","outline":"#757684","primary-container":"#1e40af","on-secondary-container":"#006f66","surface-tint":"#3755c3","on-primary-container":"#a8b8ff","secondary-fixed-dim":"#6bd8cb","on-tertiary-fixed":"#380d00","on-surface":"#131b2e","secondary":"#006a61","on-primary":"#ffffff","surface-dim":"#d2d9f4","on-secondary-fixed-variant":"#005049","tertiary":"#611e00","on-tertiary-container":"#ffa583","on-error-container":"#93000a","outline-variant":"#c4c5d5","on-primary-fixed-variant":"#173bab","surface-variant":"#dae2fd","secondary-fixed":"#89f5e7","tertiary-fixed":"#ffdbce","primary-fixed-dim":"#b8c4ff"},borderRadius:{DEFAULT:"0.25rem",lg:"0.5rem",xl:"0.75rem",full:"9999px"},spacing:{"margin-compact":"1rem","space-sm":"0.5rem","space-xl":"2.5rem",gutter:"1.5rem","space-md":"1rem",margin:"2rem","space-lg":"1.5rem","space-xs":"0.25rem","gutter-compact":"0.75rem"},fontFamily:{"body-lg":["Plus Jakarta Sans"],"label-sm":["Inter"],display:["Plus Jakarta Sans"],"body-sm":["Plus Jakarta Sans"],"body-md":["Plus Jakarta Sans"],"headline-lg":["Plus Jakarta Sans"],"label-lg":["Inter"],"label-md":["Inter"],"headline-md":["Plus Jakarta Sans"],"headline-sm":["Plus Jakarta Sans"]},fontSize:{"body-lg":["16px",{lineHeight:"24px",fontWeight:"400"}],"label-sm":["11px",{lineHeight:"14px",letterSpacing:"0.04em",fontWeight:"600"}],display:["36px",{lineHeight:"44px",letterSpacing:"-0.02em",fontWeight:"600"}],"body-sm":["13px",{lineHeight:"18px",fontWeight:"400"}],"body-md":["14px",{lineHeight:"20px",fontWeight:"400"}],"headline-lg":["28px",{lineHeight:"36px",letterSpacing:"-0.02em",fontWeight:"600"}],"label-lg":["14px",{lineHeight:"20px",letterSpacing:"0.01em",fontWeight:"500"}],"label-md":["12px",{lineHeight:"16px",letterSpacing:"0.02em",fontWeight:"500"}],"headline-md":["22px",{lineHeight:"28px",letterSpacing:"-0.01em",fontWeight:"600"}],"headline-sm":["18px",{lineHeight:"24px",letterSpacing:"-0.01em",fontWeight:"600"}]}}}};</script></head><body class="bg-surface font-body-md text-body-md text-on-surface min-h-screen"><header class="fixed top-0 left-0 right-0 z-50 bg-surface-container-lowest/95 backdrop-blur-md shadow-[0_1px_8px_rgba(0,0,0,0.04)]"><div class="h-16 max-w-7xl mx-auto px-6 lg:px-12 flex items-center justify-between"><div class="flex items-center gap-space-xl"><div class="flex items-center gap-space-sm"><img alt="Apartment Booking Logo" class="h-8 w-auto object-contain" src="https://lh3.googleusercontent.com/aida/ALJJyrDintWBGFkF9X8l3pk74ucbSdzyox0UEzIY0Q_qw4EfFhCdUHfVSiP-d0A-7F3X0ny1J4bRszoPgHnPzspXzQqksPdJHww_5-kRyyhQ531M543shqt8CdeQlu5-MqHIPmQj-3zRGnEeCXRgoAdeQBjEI2gSdzYW29yFSlRIC2pupiIYptlx_RpFswoxTJKHnTFkuqCMNbAmYqhTAx7_T-F_hB7ax5vULPo3lrkHhzQ"><span class="font-headline-sm text-headline-sm text-primary font-bold tracking-tight">Apartment Booking</span></div><nav class="flex items-center gap-space-lg" data-active-classes="text-primary font-bold border-b-2 border-primary"><a aria-current="page" class="h-16 inline-flex items-center transition-colors text-primary font-bold border-b-2 border-primary" data-path="apartments" href="#">Apartments</a><a class="h-16 inline-flex items-center text-on-surface-variant font-label-lg text-label-lg hover:text-on-surface transition-colors" data-path="bookings" href="#">Bookings</a><a class="h-16 inline-flex items-center gap-space-xs text-on-surface-variant font-label-lg text-label-lg hover:text-on-surface transition-colors" data-path="api-docs" href="#"><span>API docs</span><span class="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-surface-container-high text-on-surface-variant">v1</span></a></nav></div><div class="flex items-center gap-space-lg"></div></div></header><main class="w-full pt-16 bg-surface"><div class="flex flex-col w-full">
+<!-- Interactive Toast Notification Component -->
+<div class="fixed top-20 right-6 z-50 flex items-center justify-between gap-space-md bg-surface-container-lowest text-on-surface px-space-md py-space-sm rounded-lg shadow-lg border-l-4 border-secondary max-w-sm transition-all duration-300 transform translate-y-0 opacity-100" id="toastNotification">
+<div class="flex items-center gap-space-sm min-w-0">
+<span class="material-symbols-outlined text-secondary text-[20px] flex-shrink-0" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+<div class="flex flex-col">
+<span class="font-label-sm text-label-sm text-secondary uppercase tracking-wider font-bold">Update Complete</span>
+<span class="font-body-sm text-body-sm text-on-surface truncate">Apartment “Canal Loft Suite” updated successfully</span>
+</div>
+</div>
+<button aria-label="Dismiss toast" class="p-space-xs text-on-surface-variant hover:text-on-surface rounded transition-colors" onclick="document.getElementById('toastNotification').classList.add('opacity-0', 'translate-x-4', 'pointer-events-none')">
+<span class="material-symbols-outlined text-[18px]">close</span>
+</button>
+</div>
+<div class="max-w-7xl mx-auto w-full px-6 lg:px-12 py-space-lg flex flex-col gap-space-xl">
+<!-- Visual Overview & Page Header -->
+<header class="flex flex-col lg:flex-row lg:items-end justify-between gap-space-lg">
+<div class="flex flex-col max-w-2xl">
+<div class="flex items-center gap-space-xs text-primary font-label-md text-label-md uppercase tracking-wider mb-space-xs font-semibold">
+<span class="material-symbols-outlined text-[16px]">domain</span>
+<span>Portfolio Operations · Core Registry</span>
+</div>
+<h1 class="font-headline-lg text-headline-lg text-on-surface tracking-tight font-bold">Apartments Overview</h1>
+<p class="font-body-md text-body-md text-on-surface-variant mt-space-xs">
+          Manage your boutique portfolio, verify night rates, and run live availability checks across operational metropolitan residences.
+        </p>
+</div>
+<!-- Quick Metrics Strip -->
+<div class="flex flex-wrap items-center gap-space-sm">
+<div class="flex items-center gap-space-xs px-3.5 py-2 rounded-full bg-surface-container shadow-sm">
+<span class="w-2 h-2 rounded-full bg-primary"></span>
+<span class="font-label-sm text-label-sm text-on-surface font-semibold">6 Properties Total</span>
+</div>
+<div class="flex items-center gap-space-xs px-3.5 py-2 rounded-full bg-surface-container shadow-sm">
+<span class="w-2 h-2 rounded-full bg-secondary"></span>
+<span class="font-label-sm text-label-sm text-secondary font-semibold">5 Active Listed</span>
+</div>
+<div class="flex items-center gap-space-xs px-3.5 py-2 rounded-full bg-surface-container-high shadow-sm">
+<span class="material-symbols-outlined text-[16px] text-tertiary">trending_up</span>
+<span class="font-label-sm text-label-sm text-on-surface font-semibold">92% Occupancy this Month</span>
+</div>
+</div>
+</header>
+<!-- Visual Portfolio Spotlight Bento Banner -->
+<section class="grid grid-cols-1 md:grid-cols-12 gap-space-md rounded-xl bg-surface-container-low p-space-md shadow-sm">
+<div class="flex flex-col justify-between p-space-md md:col-span-12">
+<div>
+<span class="font-label-sm text-label-sm text-primary uppercase font-bold tracking-widest">Flagship Asset Performance</span>
+<h2 class="font-headline-md text-headline-md text-on-surface font-semibold mt-1">Canal Loft Suite · Historic Centrum</h2>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-2 max-w-xl">
+            Currently maintaining 98.4% seasonal booking fulfillment with high repeat patron ratings. Yield generated past 30 days is pacing 18% above median Amsterdam canal-belt listings.
+          </p>
+</div>
+<!-- Live Occupancy Mini Sparkline SVG -->
+<div class="mt-space-md pt-space-sm flex items-center gap-space-lg flex-wrap">
+<div class="flex flex-col">
+<span class="font-label-sm text-label-sm text-on-surface-variant uppercase">30-Day Revenue</span>
+<span class="font-headline-sm text-headline-sm text-primary font-bold">€7,440</span>
+</div>
+<div class="h-8 w-36">
+<svg class="w-full h-full text-secondary" fill="none" viewBox="0 0 144 32">
+<path d="M0 24L24 18L48 22L72 10L96 14L120 4L144 8" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"></path>
+<path d="M0 24L24 18L48 22L72 10L96 14L120 4L144 8V32H0Z" fill="currentColor" fill-opacity="0.1"></path>
+</svg>
+</div>
+<div class="flex items-center gap-space-xs text-secondary font-label-md text-label-md font-semibold">
+<span class="material-symbols-outlined text-[18px]">verified</span>
+<span>Inspected &amp; Superhost Certified</span>
+</div>
+</div>
+</div>
+
+</section>
+<!-- Main Workspace Split: Core Register & Interactive Engines -->
+<div class="grid grid-cols-1 xl:grid-cols-12 gap-space-xl items-start">
+<!-- Left Column: Registry Table & Portfolio Tools (7 Cols) -->
+<section class="xl:col-span-7 flex flex-col gap-space-lg">
+<!-- Table Card -->
+<div class="bg-surface-container-lowest rounded-xl shadow-sm flex flex-col overflow-hidden">
+<div class="p-space-md sm:p-space-lg flex flex-col sm:flex-row sm:items-center justify-between gap-space-sm bg-surface-container-lowest">
+<div>
+<h2 class="font-headline-sm text-headline-sm text-on-surface font-bold">Registered Units</h2>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Real-time status, night tariffs, and active occupancy count</p>
+</div>
+<div class="flex items-center gap-space-xs">
+<span class="font-label-sm text-label-sm text-on-surface-variant px-2.5 py-1 rounded bg-surface-container font-semibold">Showing 5 of 6 active</span>
+<button class="px-3 py-1.5 rounded-lg bg-surface-container-low hover:bg-surface-container text-on-surface font-label-md text-label-md transition-colors flex items-center gap-1" onclick="toggleEmptyPreview()" title="Toggle Empty State View Simulator">
+<span class="material-symbols-outlined text-[16px]">visibility</span>
+<span id="toggleText">Empty View</span>
+</button>
+</div>
+</div>
+<!-- Apartments Table Container -->
+<div class="w-full overflow-x-auto" id="tableWrapper">
+<table class="w-full text-left border-collapse">
+<thead>
+<tr class="bg-surface-container-low text-on-surface-variant font-label-md text-label-md tracking-wider uppercase">
+<th class="py-3.5 px-space-md sm:px-space-lg font-semibold">Apartment Name</th>
+<th class="py-3.5 px-space-md font-semibold">Address</th>
+<th class="py-3.5 px-space-md font-semibold">Rooms</th>
+<th class="py-3.5 px-space-md font-semibold">Rate / Night</th>
+<th class="py-3.5 px-space-md font-semibold">Status</th>
+<th class="py-3.5 px-space-md sm:pr-space-lg text-right font-semibold">Action</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-surface-container text-body-md font-body-md text-on-surface">
+<!-- Unit 1 -->
+<tr class="hover:bg-surface-container-low/60 transition-colors group">
+<td class="py-4 px-space-md sm:px-space-lg">
+<a class="font-label-lg text-label-lg font-bold text-primary group-hover:underline flex items-center gap-1.5" href="#">
+<span>Canal Loft Suite</span>
+<span class="material-symbols-outlined text-[14px] opacity-0 group-hover:opacity-100 transition-opacity">open_in_new</span>
+</a>
+<span class="font-label-sm text-label-sm text-on-surface-variant block">ID: AMS-342</span>
+</td>
+<td class="py-4 px-space-md text-on-surface-variant font-body-sm text-body-sm whitespace-nowrap">
+                    Prinsengracht 342, Amsterdam
+                  </td>
+<td class="py-4 px-space-md">
+<span class="px-2.5 py-1 rounded-full bg-surface-container font-label-sm text-label-sm font-semibold text-on-surface whitespace-nowrap">
+                      3 Rooms
+                    </span>
+</td>
+<td class="py-4 px-space-md font-label-lg text-label-lg font-bold text-on-surface whitespace-nowrap">
+                    €240<span class="text-on-surface-variant font-body-sm text-body-sm font-normal">/nt</span>
+</td>
+<td class="py-4 px-space-md whitespace-nowrap">
+<span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-secondary-container/40 text-on-secondary-container font-label-sm text-label-sm font-semibold">
+<span class="w-1.5 h-1.5 rounded-full bg-secondary"></span>
+                      2 Active
+                    </span>
+</td>
+<td class="py-4 px-space-md sm:pr-space-lg text-right whitespace-nowrap">
+<button class="font-label-md text-label-md font-semibold text-primary hover:text-primary-container inline-flex items-center gap-0.5">
+<span>Details</span>
+<span class="material-symbols-outlined text-[16px]">arrow_forward</span>
+</button>
+</td>
+</tr>
+<!-- Unit 2 -->
+<tr class="hover:bg-surface-container-low/60 transition-colors group">
+<td class="py-4 px-space-md sm:px-space-lg">
+<a class="font-label-lg text-label-lg font-bold text-primary group-hover:underline flex items-center gap-1.5" href="#">
+<span>Riverside Penthouse</span>
+<span class="material-symbols-outlined text-[14px] opacity-0 group-hover:opacity-100 transition-opacity">open_in_new</span>
+</a>
+<span class="font-label-sm text-label-sm text-on-surface-variant block">ID: PAR-012</span>
+</td>
+<td class="py-4 px-space-md text-on-surface-variant font-body-sm text-body-sm whitespace-nowrap">
+                    Quai Saint-Bernard 12, Paris
+                  </td>
+<td class="py-4 px-space-md">
+<span class="px-2.5 py-1 rounded-full bg-surface-container font-label-sm text-label-sm font-semibold text-on-surface whitespace-nowrap">
+                      4 Rooms
+                    </span>
+</td>
+<td class="py-4 px-space-md font-label-lg text-label-lg font-bold text-on-surface whitespace-nowrap">
+                    €380<span class="text-on-surface-variant font-body-sm text-body-sm font-normal">/nt</span>
+</td>
+<td class="py-4 px-space-md whitespace-nowrap">
+<span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-secondary-container/40 text-on-secondary-container font-label-sm text-label-sm font-semibold">
+<span class="w-1.5 h-1.5 rounded-full bg-secondary"></span>
+                      1 Active
+                    </span>
+</td>
+<td class="py-4 px-space-md sm:pr-space-lg text-right whitespace-nowrap">
+<button class="font-label-md text-label-md font-semibold text-primary hover:text-primary-container inline-flex items-center gap-0.5">
+<span>Details</span>
+<span class="material-symbols-outlined text-[16px]">arrow_forward</span>
+</button>
+</td>
+</tr>
+<!-- Unit 3 -->
+<tr class="hover:bg-surface-container-low/60 transition-colors group">
+<td class="py-4 px-space-md sm:px-space-lg">
+<a class="font-label-lg text-label-lg font-bold text-primary group-hover:underline flex items-center gap-1.5" href="#">
+<span>St. Martin Studio</span>
+<span class="material-symbols-outlined text-[14px] opacity-0 group-hover:opacity-100 transition-opacity">open_in_new</span>
+</a>
+<span class="font-label-sm text-label-sm text-on-surface-variant block">ID: BER-045</span>
+</td>
+<td class="py-4 px-space-md text-on-surface-variant font-body-sm text-body-sm whitespace-nowrap">
+                    Kaiser-Friedrich-Str. 45, Berlin
+                  </td>
+<td class="py-4 px-space-md">
+<span class="px-2.5 py-1 rounded-full bg-surface-container font-label-sm text-label-sm font-semibold text-on-surface whitespace-nowrap">
+                      1 Room
+                    </span>
+</td>
+<td class="py-4 px-space-md font-label-lg text-label-lg font-bold text-on-surface whitespace-nowrap">
+                    €115<span class="text-on-surface-variant font-body-sm text-body-sm font-normal">/nt</span>
+</td>
+<td class="py-4 px-space-md whitespace-nowrap">
+<span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-surface-container text-on-surface-variant font-label-sm text-label-sm font-medium">
+<span class="w-1.5 h-1.5 rounded-full bg-outline"></span>
+                      0 Active
+                    </span>
+</td>
+<td class="py-4 px-space-md sm:pr-space-lg text-right whitespace-nowrap">
+<button class="font-label-md text-label-md font-semibold text-primary hover:text-primary-container inline-flex items-center gap-0.5">
+<span>Details</span>
+<span class="material-symbols-outlined text-[16px]">arrow_forward</span>
+</button>
+</td>
+</tr>
+<!-- Unit 4 -->
+<tr class="hover:bg-surface-container-low/60 transition-colors group">
+<td class="py-4 px-space-md sm:px-space-lg">
+<a class="font-label-lg text-label-lg font-bold text-primary group-hover:underline flex items-center gap-1.5" href="#">
+<span>Old Town Heritage Flat</span>
+<span class="material-symbols-outlined text-[14px] opacity-0 group-hover:opacity-100 transition-opacity">open_in_new</span>
+</a>
+<span class="font-label-sm text-label-sm text-on-surface-variant block">ID: PRG-088</span>
+</td>
+<td class="py-4 px-space-md text-on-surface-variant font-body-sm text-body-sm whitespace-nowrap">
+                    Karlova 18, Prague
+                  </td>
+<td class="py-4 px-space-md">
+<span class="px-2.5 py-1 rounded-full bg-surface-container font-label-sm text-label-sm font-semibold text-on-surface whitespace-nowrap">
+                      2 Rooms
+                    </span>
+</td>
+<td class="py-4 px-space-md font-label-lg text-label-lg font-bold text-on-surface whitespace-nowrap">
+                    €160<span class="text-on-surface-variant font-body-sm text-body-sm font-normal">/nt</span>
+</td>
+<td class="py-4 px-space-md whitespace-nowrap">
+<span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-secondary-container/40 text-on-secondary-container font-label-sm text-label-sm font-semibold">
+<span class="w-1.5 h-1.5 rounded-full bg-secondary"></span>
+                      1 Active
+                    </span>
+</td>
+<td class="py-4 px-space-md sm:pr-space-lg text-right whitespace-nowrap">
+<button class="font-label-md text-label-md font-semibold text-primary hover:text-primary-container inline-flex items-center gap-0.5">
+<span>Details</span>
+<span class="material-symbols-outlined text-[16px]">arrow_forward</span>
+</button>
+</td>
+</tr>
+<!-- Unit 5 -->
+<tr class="hover:bg-surface-container-low/60 transition-colors group">
+<td class="py-4 px-space-md sm:px-space-lg">
+<a class="font-label-lg text-label-lg font-bold text-primary group-hover:underline flex items-center gap-1.5" href="#">
+<span>Bellevue Garden Duplex</span>
+<span class="material-symbols-outlined text-[14px] opacity-0 group-hover:opacity-100 transition-opacity">open_in_new</span>
+</a>
+<span class="font-label-sm text-label-sm text-on-surface-variant block">ID: ZRH-204</span>
+</td>
+<td class="py-4 px-space-md text-on-surface-variant font-body-sm text-body-sm whitespace-nowrap">
+                    Gotthardstrasse 26, Zurich
+                  </td>
+<td class="py-4 px-space-md">
+<span class="px-2.5 py-1 rounded-full bg-surface-container font-label-sm text-label-sm font-semibold text-on-surface whitespace-nowrap">
+                      3 Rooms
+                    </span>
+</td>
+<td class="py-4 px-space-md font-label-lg text-label-lg font-bold text-on-surface whitespace-nowrap">
+                    €295<span class="text-on-surface-variant font-body-sm text-body-sm font-normal">/nt</span>
+</td>
+<td class="py-4 px-space-md whitespace-nowrap">
+<span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-secondary-container/40 text-on-secondary-container font-label-sm text-label-sm font-semibold">
+<span class="w-1.5 h-1.5 rounded-full bg-secondary"></span>
+                      3 Active
+                    </span>
+</td>
+<td class="py-4 px-space-md sm:pr-space-lg text-right whitespace-nowrap">
+<button class="font-label-md text-label-md font-semibold text-primary hover:text-primary-container inline-flex items-center gap-0.5">
+<span>Details</span>
+<span class="material-symbols-outlined text-[16px]">arrow_forward</span>
+</button>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<!-- Empty State Simulation Box (Default Hidden) -->
+<div class="hidden p-space-xl flex-col items-center justify-center text-center bg-surface-container-low" id="emptyStateBox">
+<div class="w-16 h-16 rounded-full bg-surface-container-high flex items-center justify-center text-on-surface-variant mb-space-sm">
+<span class="material-symbols-outlined text-[32px]">apartment</span>
+</div>
+<h3 class="font-headline-sm text-headline-sm font-bold text-on-surface">No apartments yet.</h3>
+<p class="font-body-md text-body-md text-on-surface-variant max-w-sm mt-1">
+              Your real estate portfolio registry is clean. Register an apartment unit below to begin accepting guest reservations.
+            </p>
+<button class="mt-space-md px-4 py-2 bg-primary text-on-primary font-label-md text-label-md rounded-lg shadow-sm hover:bg-primary-container transition-all" onclick="document.getElementById('apartmentNameInput').focus()">
+              Add First Apartment
+            </button>
+</div>
+<!-- Table Footer Pagination / Summary -->
+<div class="px-space-md sm:px-space-lg py-3 bg-surface-container-low/50 flex items-center justify-between text-on-surface-variant font-label-sm text-label-sm">
+<span>Portfolio Health: 100% compliant with local lodging tax ID</span>
+<div class="flex items-center gap-2">
+<button class="p-1 rounded hover:bg-surface-container text-on-surface-variant disabled:opacity-40" disabled="">
+<span class="material-symbols-outlined text-[18px]">chevron_left</span>
+</button>
+<span class="font-semibold text-on-surface">1</span>
+<button class="p-1 rounded hover:bg-surface-container text-on-surface-variant disabled:opacity-40" disabled="">
+<span class="material-symbols-outlined text-[18px]">chevron_right</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Secondary Visual: District Distribution Quick Grid -->
+<div class="grid grid-cols-1 sm:grid-cols-3 gap-space-sm">
+<div class="p-space-md rounded-xl bg-surface-container-lowest shadow-sm flex items-center gap-space-sm">
+<div class="w-10 h-10 rounded-lg bg-surface-container flex items-center justify-center text-primary">
+<span class="material-symbols-outlined">location_city</span>
+</div>
+<div>
+<span class="font-label-sm text-label-sm text-on-surface-variant block">Western Europe</span>
+<span class="font-headline-sm text-headline-sm font-bold text-on-surface">4 Units</span>
+</div>
+</div>
+<div class="p-space-md rounded-xl bg-surface-container-lowest shadow-sm flex items-center gap-space-sm">
+<div class="w-10 h-10 rounded-lg bg-secondary-container/30 flex items-center justify-center text-secondary">
+<span class="material-symbols-outlined">meeting_room</span>
+</div>
+<div>
+<span class="font-label-sm text-label-sm text-on-surface-variant block">Total Capacity</span>
+<span class="font-headline-sm text-headline-sm font-bold text-on-surface">13 Rooms</span>
+</div>
+</div>
+<div class="p-space-md rounded-xl bg-surface-container-lowest shadow-sm flex items-center gap-space-sm">
+<div class="w-10 h-10 rounded-lg bg-surface-container-high flex items-center justify-center text-tertiary">
+<span class="material-symbols-outlined">payments</span>
+</div>
+<div>
+<span class="font-label-sm text-label-sm text-on-surface-variant block">Avg. Portfolio ADR</span>
+<span class="font-headline-sm text-headline-sm font-bold text-on-surface">€238</span>
+</div>
+</div>
+</div>
+</section>
+<!-- Right Column: Action Cards Engine (5 Cols) -->
+<section class="xl:col-span-5 flex flex-col gap-space-lg">
+<!-- CARD A: Live Availability Search Engine -->
+<div class="bg-surface-container-lowest rounded-xl shadow-sm p-space-md sm:p-space-lg flex flex-col gap-space-md">
+<div class="flex items-start justify-between">
+<div>
+<div class="flex items-center gap-1.5 text-primary mb-1">
+<span class="material-symbols-outlined text-[20px]">calendar_month</span>
+<span class="font-label-sm text-label-sm font-bold uppercase tracking-wider">Inventory Search</span>
+</div>
+<h2 class="font-headline-sm text-headline-sm text-on-surface font-bold">Search Availability</h2>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Verify unoccupied windows across custom night bounds</p>
+</div>
+</div>
+<form class="flex flex-col gap-space-sm" id="availabilityForm" onsubmit="event.preventDefault(); triggerAvailabilitySearch();">
+<div class="grid grid-cols-1 sm:grid-cols-2 gap-space-sm">
+<!-- Check-In -->
+<div class="flex flex-col gap-1">
+<label class="font-label-md text-label-md text-on-surface font-semibold" for="checkInDate">Check-in Date</label>
+<div class="relative flex items-center">
+<input class="w-full h-10 px-3 pr-8 rounded-lg bg-surface-container-low text-on-surface font-body-md text-body-md focus:bg-surface-container-lowest focus:outline-none focus:ring-1 focus:ring-primary transition-all" id="checkInDate" type="date" value="2025-10-14">
+<span class="material-symbols-outlined absolute right-2.5 text-on-surface-variant text-[18px] pointer-events-none">event</span>
+</div>
+</div>
+<!-- Check-Out -->
+<div class="flex flex-col gap-1">
+<label class="font-label-md text-label-md text-on-surface font-semibold" for="checkOutDate">Check-out Date</label>
+<div class="relative flex items-center">
+<input class="w-full h-10 px-3 pr-8 rounded-lg bg-surface-container-low text-on-surface font-body-md text-body-md focus:bg-surface-container-lowest focus:outline-none focus:ring-1 focus:ring-primary transition-all" id="checkOutDate" type="date" value="2025-10-18">
+<span class="material-symbols-outlined absolute right-2.5 text-on-surface-variant text-[18px] pointer-events-none">event</span>
+</div>
+</div>
+</div>
+<div class="flex items-center justify-between text-on-surface-variant font-label-sm text-label-sm px-1">
+<span>Check-out is exclusive · 4 nights stay</span>
+<span class="text-secondary font-semibold">Auto-calculated</span>
+</div>
+<!-- Minimum Rooms (Integer >= 1) -->
+<div class="flex flex-col gap-1 mt-1">
+<label class="font-label-md text-label-md text-on-surface font-semibold" for="minRooms">Minimum Bedrooms Required</label>
+<div class="flex items-center gap-space-sm">
+<div class="relative flex-1">
+<input class="w-full h-10 px-3 pl-9 rounded-lg bg-surface-container-low text-on-surface font-body-md text-body-md focus:bg-surface-container-lowest focus:outline-none focus:ring-1 focus:ring-primary transition-all" id="minRooms" max="12" min="1" type="number" value="2">
+<span class="material-symbols-outlined absolute left-2.5 top-2.5 text-on-surface-variant text-[18px]">bed</span>
+</div>
+<button class="h-10 px-space-md bg-primary hover:bg-primary-container text-on-primary font-label-md text-label-md font-semibold rounded-lg shadow-sm transition-all flex items-center gap-1.5 whitespace-nowrap" type="submit">
+<span class="material-symbols-outlined text-[18px]">search</span>
+<span>Check Availability</span>
+</button>
+</div>
+</div>
+</form>
+<!-- Live Results Sub-Panel -->
+<div class="mt-space-xs p-space-md rounded-lg bg-surface-container-low flex flex-col gap-space-sm" id="resultsSubPanel">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-1.5">
+<span class="w-2 h-2 rounded-full bg-secondary"></span>
+<span class="font-label-md text-label-md font-bold text-on-surface">3 Apartments Available for 4 nights</span>
+</div>
+<span class="font-label-sm text-label-sm text-on-surface-variant">Oct 14 – Oct 18</span>
+</div>
+<div class="flex flex-col gap-space-xs">
+<!-- Result Item 1 -->
+<div class="p-space-sm rounded-lg bg-surface-container-lowest shadow-sm flex items-center justify-between gap-space-sm hover:shadow transition-shadow">
+<div class="flex flex-col min-w-0">
+<span class="font-label-md text-label-md font-bold text-on-surface truncate">Canal Loft Suite</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">3 Rooms · 4 nights × €240</span>
+</div>
+<div class="flex items-center gap-space-md flex-shrink-0">
+<div class="text-right">
+<span class="font-label-lg text-label-lg font-bold text-primary">€960</span>
+<span class="block text-[10px] text-on-surface-variant leading-none">total gross</span>
+</div>
+<button class="px-3 py-1.5 rounded-lg bg-secondary text-on-secondary font-label-sm text-label-sm font-semibold hover:bg-on-secondary-container transition-colors shadow-sm">
+                    Book Now
+                  </button>
+</div>
+</div>
+<!-- Result Item 2 -->
+<div class="p-space-sm rounded-lg bg-surface-container-lowest shadow-sm flex items-center justify-between gap-space-sm hover:shadow transition-shadow">
+<div class="flex flex-col min-w-0">
+<span class="font-label-md text-label-md font-bold text-on-surface truncate">Bellevue Garden Duplex</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">3 Rooms · 4 nights × €295</span>
+</div>
+<div class="flex items-center gap-space-md flex-shrink-0">
+<div class="text-right">
+<span class="font-label-lg text-label-lg font-bold text-primary">€1,180</span>
+<span class="block text-[10px] text-on-surface-variant leading-none">total gross</span>
+</div>
+<button class="px-3 py-1.5 rounded-lg bg-secondary text-on-secondary font-label-sm text-label-sm font-semibold hover:bg-on-secondary-container transition-colors shadow-sm">
+                    Book Now
+                  </button>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- CARD B: Add New Apartment Form -->
+<div class="bg-surface-container-lowest rounded-xl shadow-sm p-space-md sm:p-space-lg flex flex-col gap-space-md">
+<div class="flex items-start justify-between">
+<div>
+<div class="flex items-center gap-1.5 text-primary mb-1">
+<span class="material-symbols-outlined text-[20px]">add_home</span>
+<span class="font-label-sm text-label-sm font-bold uppercase tracking-wider">Unit Onboarding</span>
+</div>
+<h2 class="font-headline-sm text-headline-sm text-on-surface font-bold">Add New Apartment</h2>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Enroll an additional real estate asset with night price baseline</p>
+</div>
+<!-- Quick Helper Indicator -->
+<button class="font-label-sm text-label-sm text-on-surface-variant hover:text-error transition-colors flex items-center gap-1" onclick="toggleErrorDemo()" title="Preview Server Error Alert Box">
+<span class="material-symbols-outlined text-[16px]">info</span>
+<span>Test Error</span>
+</button>
+</div>
+<!-- Interactive Inline Server Error Preview (Simulated validation feedback) -->
+<div class="p-space-sm rounded-lg bg-error-container text-on-error-container flex items-start gap-space-xs shadow-sm" id="duplicateAlertBox">
+<span class="material-symbols-outlined text-error text-[20px] flex-shrink-0 mt-0.5" style="font-variation-settings: 'FILL' 1;">warning</span>
+<div class="flex flex-col text-left">
+<span class="font-label-sm text-label-sm font-bold text-error">Registration Conflict</span>
+<span class="font-body-sm text-body-sm text-on-error-container">An apartment with this address is already registered in your portfolio.</span>
+</div>
+</div>
+<form class="flex flex-col gap-space-md" id="addApartmentForm" onsubmit="event.preventDefault(); handleNewApartment();">
+<!-- Apartment Name Field -->
+<div class="flex flex-col gap-1">
+<label class="font-label-md text-label-md text-on-surface font-semibold" for="apartmentNameInput">Apartment Name</label>
+<input class="h-10 px-3 rounded-lg bg-surface-container-low text-on-surface font-body-md text-body-md placeholder:text-outline focus:bg-surface-container-lowest focus:outline-none focus:ring-1 focus:ring-primary transition-all" id="apartmentNameInput" placeholder="e.g. Skyline Terrace 4B" required="" type="text">
+</div>
+<!-- Address Field -->
+<div class="flex flex-col gap-1">
+<label class="font-label-md text-label-md text-on-surface font-semibold" for="addressInput">Street &amp; City Address</label>
+<div class="relative flex items-center">
+<input class="w-full h-10 px-3 pr-8 rounded-lg bg-surface-container-low text-on-surface font-body-md text-body-md placeholder:text-outline focus:bg-surface-container-lowest focus:outline-none focus:ring-1 focus:ring-primary transition-all" id="addressInput" placeholder="e.g. Via Della Spiga 18, Milan" required="" type="text">
+<span class="material-symbols-outlined absolute right-2.5 text-on-surface-variant text-[18px]">location_on</span>
+</div>
+</div>
+<!-- Rooms (Integer >= 1) & Night Price (Integer/Float >= 0) -->
+<div class="grid grid-cols-1 sm:grid-cols-2 gap-space-sm">
+<div class="flex flex-col gap-1">
+<label class="font-label-md text-label-md text-on-surface font-semibold" for="roomsInput">Bedrooms</label>
+<input class="h-10 px-3 rounded-lg bg-surface-container-low text-on-surface font-body-md text-body-md focus:bg-surface-container-lowest focus:outline-none focus:ring-1 focus:ring-primary transition-all" id="roomsInput" min="1" required="" step="1" type="number" value="2">
+<span class="font-label-sm text-label-sm text-on-surface-variant">Minimum 1 room</span>
+</div>
+<div class="flex flex-col gap-1">
+<label class="font-label-md text-label-md text-on-surface font-semibold" for="priceInput">Price per night (€)</label>
+<div class="relative flex items-center">
+<span class="absolute left-3 font-semibold text-on-surface-variant">€</span>
+<input class="w-full h-10 pl-7 pr-3 rounded-lg bg-surface-container-low text-on-surface font-body-md text-body-md focus:bg-surface-container-lowest focus:outline-none focus:ring-1 focus:ring-primary transition-all" id="priceInput" min="0" required="" step="5" type="number" value="210">
+</div>
+<span class="font-label-sm text-label-sm text-on-surface-variant">≥ €0.00 EUR</span>
+</div>
+</div>
+<!-- Buttons -->
+<div class="flex items-center justify-between pt-space-xs">
+<button class="px-4 py-2 font-label-md text-label-md text-on-surface-variant hover:text-on-surface transition-colors" type="reset">
+                Reset
+              </button>
+<button class="px-space-lg py-2.5 bg-primary hover:bg-primary-container text-on-primary font-label-md text-label-md font-semibold rounded-lg shadow-sm transition-all flex items-center gap-1.5" type="submit">
+<span class="material-symbols-outlined text-[18px]">save</span>
+<span>Save Apartment</span>
+</button>
+</div>
+</form>
+</div>
+</section>
+</div>
+</div>
+<!-- Micro-interactions Script -->
+<script>
+    function toggleEmptyPreview() {
+      const table = document.getElementById('tableWrapper');
+      const empty = document.getElementById('emptyStateBox');
+      const text = document.getElementById('toggleText');
+      if (empty.classList.contains('hidden')) {
+        empty.classList.remove('hidden');
+        empty.classList.add('flex');
+        table.classList.add('hidden');
+        text.innerText = 'Show Table';
+      } else {
+        empty.classList.add('hidden');
+        empty.classList.remove('flex');
+        table.classList.remove('hidden');
+        text.innerText = 'Empty View';
+      }
+    }
+
+    function toggleErrorDemo() {
+      const alert = document.getElementById('duplicateAlertBox');
+      alert.classList.toggle('hidden');
+    }
+
+    function triggerAvailabilitySearch() {
+      const panel = document.getElementById('resultsSubPanel');
+      panel.classList.add('ring-2', 'ring-primary');
+      setTimeout(() => {
+        panel.classList.remove('ring-2', 'ring-primary');
+      }, 700);
+    }
+
+    function handleNewApartment() {
+      const name = document.getElementById('apartmentNameInput').value;
+      const toast = document.getElementById('toastNotification');
+      if (toast) {
+        toast.querySelector('.truncate').innerText = `Apartment "${name || 'New Unit'}" registered successfully`;
+        toast.classList.remove('opacity-0', 'translate-x-4', 'pointer-events-none');
+        setTimeout(() => {
+          toast.classList.add('opacity-0', 'translate-x-4', 'pointer-events-none');
+        }, 4000);
+      }
+    }
+  </script>
+</div></main><footer class="w-full bg-surface-container-low shadow-[0_-1px_6px_rgba(0,0,0,0.02)] mt-space-xl"><div class="max-w-7xl mx-auto px-6 lg:px-12 py-space-lg flex flex-col sm:flex-row items-center justify-between gap-space-sm font-label-md text-label-md text-on-surface-variant"><div>© 2024 Apartment Booking Management Inc. All rights reserved.</div><div class="flex items-center gap-space-md"><span class="hover:text-on-surface transition-colors cursor-pointer">Operational Status</span><span class="hover:text-on-surface transition-colors cursor-pointer">Concierge Support</span><span class="hover:text-on-surface transition-colors cursor-pointer">Privacy Policy</span></div></div></footer>
+
+
+
+</body></html>
