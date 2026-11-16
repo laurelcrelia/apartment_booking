@@ -142,6 +142,20 @@ Without Docker, data is stored in `./data.json`. Override it with the `APT_DATA_
 
 `scripts/smoke_test.py` runs every workflow against a running server and cleans up afterwards: `python3 scripts/smoke_test.py http://localhost:8000`.
 
+## Browser tests (Playwright)
+
+`e2e/` holds end-to-end tests that drive the web UI in Chromium with [Playwright](https://playwright.dev/python/). They start the app on a free local port with fresh in-memory data for every test, so they never touch your `data.json`. They need Python 3.10+.
+
+```sh
+pip install -r requirements-e2e.txt
+python -m playwright install chromium        # once; add --with-deps on Linux
+
+python -m unittest discover -s e2e -v        # run headless
+HEADED=1 python -m unittest discover -s e2e  # watch them in a browser window
+```
+
+`e2e/` has no `__init__.py`, so a plain `python -m unittest` (and the Docker test image) doesn't pick these tests up and doesn't need a browser.
+
 ## Project layout
 
 ```
@@ -155,6 +169,7 @@ apartment_booking/
   static/         CSS and the JavaScript that sends forms to the API
   cli.py          command-line interface
 tests/            unit tests (service, API, pages, OpenAPI spec)
+e2e/              browser tests (Playwright, Chromium)
 scripts/          end-to-end smoke test
 ```
 
@@ -166,6 +181,7 @@ GitHub Actions (`.github/workflows/ci.yml`) runs on every push to `main` and on 
 
 - **Docker tests**: builds the test image for each Python version from 3.9 to 3.13 and runs the unit tests inside it.
 - **Code coverage**: measures coverage with [coverage.py](https://coverage.readthedocs.io/) and fails if it drops below 90%. The report is shown in the run summary and uploaded as the `coverage-html` artifact.
+- **Browser tests**: installs Playwright and Chromium and runs the `e2e/` tests against the web UI.
 - **Docker Compose end-to-end**: starts the app with Compose, runs `scripts/smoke_test.py`, restarts it to check that data persists, and runs the CLI and the tests through Compose.
 
 To build for a specific Python version locally:
@@ -176,7 +192,7 @@ docker build --build-arg PYTHON_VERSION=3.9 -t apartment-booking:py3.9 .
 
 ## GitLab CI
 
-The project is mirrored to [gitlab.inf.unibz.it](https://gitlab.inf.unibz.it/LaurelCrelia.Matt/apartment_booking). `.gitlab-ci.yml` runs the same three jobs as GitHub Actions on a self-hosted runner using the **shell executor**: jobs run directly on the runner machine and use its Docker, so no Docker-in-Docker is needed.
+The project is mirrored to [gitlab.inf.unibz.it](https://gitlab.inf.unibz.it/LaurelCrelia.Matt/apartment_booking). `.gitlab-ci.yml` runs the same jobs as GitHub Actions on a self-hosted runner using the **shell executor**: jobs run directly on the runner machine and use its Docker, so no Docker-in-Docker is needed.
 
 Each job uses its own Compose project, data volume (`booking-data-ci-<job id>`) and port (`18000`), so CI never touches the app or data you run yourself on the same machine. Override them for your own use with `APP_PORT` and `BOOKING_VOLUME`.
 

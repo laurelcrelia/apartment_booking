@@ -52,6 +52,15 @@ coverage:
         coverage_format: cobertura
         path: coverage.xml
 
+playwright:
+  stage: e2e
+  script:
+    - python3 -m venv .venv
+    - .venv/bin/pip install -r requirements-e2e.txt
+    # Chromium is cached in ~/Library/Caches/ms-playwright, so this only downloads once.
+    - .venv/bin/python -m playwright install chromium
+    - .venv/bin/python -m unittest discover -s e2e -v
+
 compose-e2e:
   stage: e2e
   script:
