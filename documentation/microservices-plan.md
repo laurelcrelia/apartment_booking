@@ -1,6 +1,6 @@
 # Plan: extracting the Apartments microservice
 
-Status: **in progress**: steps 0–3 done. Work happens on the `microservices-apartments` branch, one commit per step.
+Status: **in progress**: steps 0–4 done. Work happens on the `microservices-apartments` branch, one commit per step.
 
 ## Why
 
@@ -159,8 +159,8 @@ The envelope is `{event_id (uuid4), type, occurred_at, data}`. The routing key e
 1. **Black-box HTTP API test suite** (`api_tests/`). It runs against the app over real HTTP, either in-process or at `API_BASE_URL` (the compose stack). It is written against today's monolith and must pass **unchanged** after every later step, so it acts as the safety net for the refactor.
 2. **SQLite inside the monolith.** Separate `ApartmentRepo` and `BookingRepo`, a transactional overlap check, no more `SerializedService` (so more than one worker is allowed), and a `data.json` → SQLite migration command (`python -m apartment_booking.migrate`) that keeps IDs.
 3. **Extract `apartments_service`** with an HTTP client in the booking service, shared HTTP helpers in `common/`, and `503` on outage. Compose already runs it as its own `apartments` container with its own volume.
-4. **Events:** outbox, relay, RabbitMQ, consumer, replica.
-5. **Containers and CI:** compose services and volumes, coverage over all packages, compose checks for event propagation and outage behaviour.
+4. **Events:** outbox, relay, RabbitMQ, consumer, replica. Compose already runs `rabbitmq`, `apartments-relay` and `booking-consumer`, and CI checks event delivery. Databases from before events are announced once by a snapshot when the relay first starts.
+5. **Containers and CI:** compose services and volumes, coverage over all packages, compose checks for event propagation and outage behaviour. Mostly done along the way in steps 3–4, so each step ran in Docker and CI; what's left is confirming a green pipeline.
 
 ## Verification (each step)
 

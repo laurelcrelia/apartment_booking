@@ -32,13 +32,17 @@ _base_url: str | None = None
 
 def start_local_server() -> str:
     """Start the apartments service and the booking web app on free ports,
-    talking to each other over HTTP like the deployed services; returns the
-    web app's URL."""
+    talking to each other over HTTP like the deployed services, plus a relay
+    thread that delivers apartment events to the booking side a little later,
+    as RabbitMQ would; returns the web app's URL."""
     from werkzeug.serving import WSGIRequestHandler, make_server
 
+    from apartment_booking.inprocess import LocalPublisher
+    from apartment_booking.repos import BookingRepo
     from apartment_booking.service import open_service
     from apartment_booking.web import create_app
     from apartments_service.app import create_app as create_apartments_app
+    from apartments_service.relay import Relay
     from apartments_service.repo import ApartmentRepo
     from apartments_service.service import ApartmentService
 
@@ -54,12 +58,23 @@ def start_local_server() -> str:
 
     tmp = tempfile.TemporaryDirectory()
     servers = []
-    apartments = ApartmentService(ApartmentRepo(os.path.join(tmp.name, "apartments.db")))
-    apartments_url = serve(create_apartments_app(apartments))
-    web_url = serve(create_app(open_service(bookings_db=os.path.join(tmp.name, "bookings.db"),
-                                            apartments_url=apartments_url)))
+    apartments_repo = ApartmentRepo(os.path.join(tmp.name, "apartments.db"))
+    bookings_db = os.path.join(tmp.name, "bookings.db")
+    apartments_url = serve(create_apartments_app(ApartmentService(apartments_repo)))
+    web_url = serve(create_app(open_service(bookings_db=bookings_db, apartments_url=apartments_url)))
+
+    relay = Relay(apartments_repo.outbox, LocalPublisher(BookingRepo(bookings_db)))
+    stopping = threading.Event()
+
+    def deliver_events():
+        while not stopping.wait(0.2):
+            relay.publish_pending()
+    relay_thread = threading.Thread(target=deliver_events, daemon=True)
+    relay_thread.start()
 
     def stop():
+        stopping.set()
+        relay_thread.join()
         for server in servers:
             server.shutdown()
         tmp.cleanup()
@@ -113,7 +128,7 @@ def day(month: int, d: int) -> str:
     return f"{YEAR}-{month:02d}-{d:02d}"
 
 
-def eventually(check, timeout: float = 5.0, interval: float = 0.1):
+def eventually(check, timeout: float = 10.0, interval: float = 0.1):
     """Retry `check` until it stops raising AssertionError.
 
     For reads that may become eventually consistent once services exchange

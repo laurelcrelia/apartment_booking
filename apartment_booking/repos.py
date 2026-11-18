@@ -1,7 +1,9 @@
 """SQLite repository for bookings. Rows are returned as plain dicts in the API's shape.
 
 Bookings refer to apartments by ID only. Apartments belong to the apartments
-service and live in its own database, so there is no foreign key.
+service and live in its own database, so there is no foreign key. This
+database keeps a replica of the apartment fields that booking rules need,
+kept up to date from the apartments service's events (see consumer.py).
 """
 from __future__ import annotations
 
@@ -20,9 +22,26 @@ CREATE TABLE IF NOT EXISTS bookings (
     status       TEXT    NOT NULL DEFAULT 'active'
 );
 CREATE INDEX IF NOT EXISTS bookings_by_apartment ON bookings (apartment_id, status);
+
+-- Read-only copy of apartments, fed by events. A deleted apartment stays as a
+-- tombstone (deleted = 1) so a late, older event can't bring it back.
+CREATE TABLE IF NOT EXISTS apartments_replica (
+    id      INTEGER PRIMARY KEY,
+    name    TEXT    NOT NULL,
+    address TEXT    NOT NULL,
+    rooms   INTEGER NOT NULL,
+    price   REAL    NOT NULL,
+    version INTEGER NOT NULL,  -- version of the apartment this row reflects; 0 = fetched over HTTP
+    deleted INTEGER NOT NULL DEFAULT 0
+);
+-- Events already applied, so a redelivered event is applied only once.
+CREATE TABLE IF NOT EXISTS processed_events (
+    event_id TEXT PRIMARY KEY
+);
 """
 
 BOOKING_COLUMNS = "id, apartment_id, guest, check_in, check_out, status"
+APARTMENT_COLUMNS = "id, name, address, rooms, price"
 
 
 def _dict(row) -> dict | None:
@@ -60,11 +79,15 @@ class BookingTable:
             " AND check_in < ? AND ? < check_out ORDER BY id LIMIT 1",
             (apt_id, ignore_id, check_out, check_in)).fetchone())
 
-    def busy_apartments(self, check_in: str, check_out: str) -> set[int]:
+    def available_apartments(self, check_in: str, check_out: str, min_rooms: int) -> list[dict]:
+        """Replica apartments with no active booking overlapping [check_in, check_out)."""
         rows = self.conn.execute(
-            "SELECT DISTINCT apartment_id FROM bookings"
-            " WHERE status = 'active' AND check_in < ? AND ? < check_out", (check_out, check_in))
-        return {r[0] for r in rows}
+            f"SELECT {APARTMENT_COLUMNS} FROM apartments_replica"
+            " WHERE deleted = 0 AND rooms >= ? AND id NOT IN ("
+            "   SELECT apartment_id FROM bookings"
+            "   WHERE status = 'active' AND check_in < ? AND ? < check_out)"
+            " ORDER BY id", (min_rooms, check_out, check_in))
+        return [dict(r) for r in rows]
 
     def insert(self, apt_id: int, guest: str, check_in: str, check_out: str, status: str) -> dict:
         cur = self.conn.execute(
@@ -76,6 +99,39 @@ class BookingTable:
         assignments = ", ".join(f"{column} = ?" for column in fields)
         self.conn.execute(f"UPDATE bookings SET {assignments} WHERE id = ?", (*fields.values(), booking_id))
         return self.get(booking_id)
+
+
+    # ---------- apartments replica ----------
+
+    def replica_get(self, apt_id: int) -> dict | None:
+        """The replica row including version and deleted flag, or None if unknown."""
+        return _dict(self.conn.execute(f"SELECT {APARTMENT_COLUMNS}, version, deleted"
+                                       " FROM apartments_replica WHERE id = ?", (apt_id,)).fetchone())
+
+    def replica_put(self, apt: dict, version: int, only_if_missing: bool = False) -> None:
+        values = (apt["id"], apt["name"], apt["address"], apt["rooms"], apt["price"], version)
+        if only_if_missing:
+            self.conn.execute("INSERT OR IGNORE INTO apartments_replica"
+                              " (id, name, address, rooms, price, version) VALUES (?, ?, ?, ?, ?, ?)", values)
+        else:
+            self.conn.execute(
+                "INSERT INTO apartments_replica (id, name, address, rooms, price, version)"
+                " VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT (id) DO UPDATE SET name = excluded.name,"
+                " address = excluded.address, rooms = excluded.rooms, price = excluded.price,"
+                " version = excluded.version, deleted = 0", values)
+
+    def replica_delete(self, apt_id: int, version: int) -> None:
+        self.conn.execute(
+            "INSERT INTO apartments_replica (id, name, address, rooms, price, version, deleted)"
+            " VALUES (?, '', '', 0, 0, ?, 1)"
+            " ON CONFLICT (id) DO UPDATE SET version = excluded.version, deleted = 1", (apt_id, version))
+
+    def event_processed(self, event_id: str) -> bool:
+        return self.conn.execute("SELECT 1 FROM processed_events WHERE event_id = ?",
+                                 (event_id,)).fetchone() is not None
+
+    def record_event(self, event_id: str) -> None:
+        self.conn.execute("INSERT INTO processed_events (event_id) VALUES (?)", (event_id,))
 
 
 class BookingRepo:

@@ -4,8 +4,13 @@ Date ranges are half-open: [check_in, check_out). A booking checking out on
 the same day another checks in does not overlap with it.
 
 BookingService owns bookings. It reaches apartments through an object with
-get/list/add/update/delete: either the apartments service's ApartmentService
-in the same process, or HttpApartments, which calls that service over HTTP.
+get/list/add/update/delete: either the apartments service in the same process
+(inprocess.LocalApartments), or HttpApartments, which calls it over HTTP.
+
+The booking rules (does the apartment exist, which apartments are free) read
+the local apartments replica, which events keep up to date, so they keep
+working while the apartments service is down. The replica may lag behind by a
+moment; see documentation/microservices-plan.md.
 """
 from __future__ import annotations
 
@@ -73,7 +78,7 @@ class BookingService:
         guest = (guest or "").strip()
         d_in, d_out = parse_date(check_in), parse_date(check_out)
         _validate_range(d_in, d_out)
-        self.apartments.get(apt_id)
+        self._require_apartment(apt_id)
         with self.bookings.writing() as table:
             self._ensure_no_overlap(table, apt_id, d_in, d_out)
             return table.insert(apt_id, guest, d_in.isoformat(), d_out.isoformat(), ACTIVE)
@@ -92,8 +97,8 @@ class BookingService:
     def change_booking(self, booking_id: int, apt_id=None, guest=None,
                        check_in=None, check_out=None) -> dict:
         if apt_id is not None:
-            # Outside the transaction: it may become a call to another service.
-            self.apartments.get(apt_id)
+            # Outside the transaction: it may call the apartments service.
+            self._require_apartment(apt_id)
         with self.bookings.writing() as table:
             booking = self._booking(table, booking_id)
             if booking["status"] != ACTIVE:
@@ -121,11 +126,26 @@ class BookingService:
         d_in, d_out = parse_date(check_in), parse_date(check_out)
         _validate_range(d_in, d_out)
         with self.bookings.reading() as table:
-            busy = table.busy_apartments(d_in.isoformat(), d_out.isoformat())
-        return [a for a in self.apartments.list()
-                if a["id"] not in busy and a["rooms"] >= min_rooms]
+            return table.available_apartments(d_in.isoformat(), d_out.isoformat(), min_rooms)
 
     # ---------- helpers ----------
+
+    def _require_apartment(self, apt_id: int) -> None:
+        """Raise NotFoundError unless the apartment exists, preferring the replica.
+
+        An apartment the replica hasn't heard of yet (created a moment ago) is
+        fetched from the apartments service and added to the replica; its
+        events will then bring it up to date.
+        """
+        with self.bookings.reading() as table:
+            known = table.replica_get(apt_id)
+        if known is not None:
+            if known["deleted"]:
+                raise NotFoundError(f"Apartment {apt_id} not found")
+            return
+        apt = self.apartments.get(apt_id)
+        with self.bookings.writing() as table:
+            table.replica_put(apt, version=0, only_if_missing=True)
 
     @staticmethod
     def _booking(table, booking_id: int) -> dict:
@@ -148,15 +168,21 @@ def open_service(apartments_db: str = ":memory:", bookings_db: str = ":memory:",
     """Build the booking service on its SQLite database.
 
     With apartments_url, apartments come from the apartments service over HTTP.
-    Without it, the apartments service runs in this process on apartments_db,
-    which keeps tests and a plain `flask run` down to one process. The
-    defaults keep everything in memory.
+    and the replica is fed by the booking consumer (consumer.py) from RabbitMQ.
+    Without it, the apartments service runs in this process on apartments_db
+    and delivers its events directly, which keeps tests and a plain
+    `flask run` down to one process. The defaults keep everything in memory.
     """
+    bookings = BookingRepo(bookings_db)
     if apartments_url:
         from .apartments_client import HttpApartments
         apartments = HttpApartments(apartments_url)
     else:
+        from apartments_service.relay import Relay
         from apartments_service.repo import ApartmentRepo
         from apartments_service.service import ApartmentService
-        apartments = ApartmentService(ApartmentRepo(apartments_db))
-    return BookingService(BookingRepo(bookings_db), apartments)
+
+        from .inprocess import LocalApartments, LocalPublisher
+        repo = ApartmentRepo(apartments_db)
+        apartments = LocalApartments(ApartmentService(repo), Relay(repo.outbox, LocalPublisher(bookings)))
+    return BookingService(bookings, apartments)

@@ -13,7 +13,7 @@ import json
 import os
 import sys
 
-from apartments_service.repo import ApartmentRepo
+from apartments_service.repo import ApartmentRepo, enqueue_snapshot
 
 from .repos import BookingRepo
 
@@ -45,6 +45,8 @@ def migrate(json_path: str, apartments_db: str, bookings_db: str) -> tuple[int, 
             "INSERT INTO apartments (id, name, address, rooms, price) VALUES (?, ?, ?, ?, ?)",
             [(a["id"], a["name"], a["address"], a["rooms"], a["price"]) for a in apts])
         _set_next_id(conn, "apartments", state["next_apartment_id"])
+        # Announce the imported apartments, so the booking side's replica learns about them.
+        enqueue_snapshot(conn)
 
     books = sorted(state["bookings"].values(), key=lambda b: b["id"])
     with bookings.db.transaction(immediate=True) as conn:

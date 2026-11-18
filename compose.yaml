@@ -1,4 +1,25 @@
+x-rabbitmq-url: &rabbitmq-url amqp://booking:booking@rabbitmq:5672/
+
 services:
+  # Message broker for events between services. Management UI:
+  # http://localhost:15672 (user and password: booking).
+  rabbitmq:
+    image: rabbitmq:4.1-management
+    environment:
+      RABBITMQ_DEFAULT_USER: booking
+      RABBITMQ_DEFAULT_PASS: booking
+    ports:
+      - "127.0.0.1:${RABBITMQ_UI_PORT:-15672}:15672"
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
   # Apartments service: internal only (no published port), with its own database.
   apartments:
     build: .
@@ -14,6 +35,36 @@ services:
       timeout: 3s
       retries: 3
       start_period: 5s
+
+  # Publishes the apartments service's outbox events to RabbitMQ.
+  apartments-relay:
+    build: .
+    image: apartment-booking
+    command: ["python", "-m", "apartments_service.relay"]
+    environment:
+      RABBITMQ_URL: *rabbitmq-url
+    volumes:
+      - apartments-data:/data
+    depends_on:
+      apartments:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # Keeps the apartments replica in bookings.db up to date from those events.
+  booking-consumer:
+    build: .
+    image: apartment-booking
+    command: ["python", "-m", "apartment_booking.consumer"]
+    environment:
+      RABBITMQ_URL: *rabbitmq-url
+    volumes:
+      - booking-data:/data
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    restart: unless-stopped
 
   # Web UI, public REST API and bookings; calls the apartments service over HTTP.
   web:
@@ -65,3 +116,5 @@ volumes:
     name: ${BOOKING_VOLUME:-booking-data}
   apartments-data:
     name: ${APARTMENTS_VOLUME:-apartments-data}
+  rabbitmq-data:
+    name: ${RABBITMQ_VOLUME:-rabbitmq-data}
