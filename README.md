@@ -175,6 +175,8 @@ scripts/          end-to-end smoke test
 
 The server runs as a single gunicorn worker with four threads. Requests are serialized with a lock so concurrent writes to the JSON file can't overwrite each other. Don't increase the worker count without moving to a real database.
 
+A plan to split apartments into their own microservice (SQLite per service, HTTP plus RabbitMQ events) is described, with architecture diagrams, in [documentation/microservices-plan.md](documentation/microservices-plan.md).
+
 ## CI
 
 GitHub Actions (`.github/workflows/ci.yml`) runs on every push to `main` and on every pull request:
