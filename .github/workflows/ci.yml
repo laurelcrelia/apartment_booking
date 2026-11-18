@@ -76,6 +76,22 @@ jobs:
       - name: Enforce minimum coverage
         run: coverage report --fail-under=90
 
+  api-tests:
+    name: HTTP API tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run API tests (app in-process)
+        run: python -m unittest discover -s api_tests -v
+
   playwright:
     name: Browser tests (Playwright, Chromium)
     runs-on: ubuntu-latest
@@ -107,6 +123,9 @@ jobs:
       - name: Run workflows against http://localhost:8000
         id: smoke
         run: python3 scripts/smoke_test.py http://localhost:8000 --keep | tee smoke.log && grep KEPT_APARTMENT_ID smoke.log >> "$GITHUB_OUTPUT"
+
+      - name: API tests against the running stack
+        run: API_BASE_URL=http://localhost:8000 python3 -m unittest discover -s api_tests -v
 
       - name: Data survives a restart
         run: |

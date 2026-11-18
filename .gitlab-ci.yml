@@ -52,6 +52,13 @@ coverage:
         coverage_format: cobertura
         path: coverage.xml
 
+api-tests:
+  stage: test
+  script:
+    - python3 -m venv .venv
+    - .venv/bin/pip install -r requirements.txt
+    - .venv/bin/python -m unittest discover -s api_tests -v
+
 playwright:
   stage: e2e
   script:
@@ -67,6 +74,7 @@ compose-e2e:
     - docker compose up -d --build --wait
     - python3 scripts/smoke_test.py http://localhost:$APP_PORT --keep > smoke.log || { cat smoke.log; exit 1; }
     - cat smoke.log
+    - API_BASE_URL=http://localhost:$APP_PORT python3 -m unittest discover -s api_tests -v
     - ID=$(grep KEPT_APARTMENT_ID smoke.log | cut -d= -f2)
     - docker compose down
     - docker compose up -d --wait

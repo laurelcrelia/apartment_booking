@@ -142,6 +142,17 @@ Without Docker, data is stored in `./data.json`. Override it with the `APT_DATA_
 
 `scripts/smoke_test.py` runs every workflow against a running server and cleans up afterwards: `python3 scripts/smoke_test.py http://localhost:8000`.
 
+## HTTP API tests
+
+`api_tests/` is a black-box test suite for the REST API. It only sends HTTP requests, never imports the app's internals, creates its own data with unique names, and cleans up afterwards. That lets the same tests check the current app and, unchanged, the app after it is split into microservices (see [documentation/microservices-plan.md](documentation/microservices-plan.md)).
+
+```sh
+python -m unittest discover -s api_tests -v                                      # app started in-process on a free port
+API_BASE_URL=http://localhost:8000 python -m unittest discover -s api_tests -v   # a running app, e.g. docker compose
+```
+
+Like `e2e/`, the folder has no `__init__.py`, so the plain unit test run doesn't include it.
+
 ## Browser tests (Playwright)
 
 `e2e/` holds end-to-end tests that drive the web UI in Chromium with [Playwright](https://playwright.dev/python/). They start the app on a free local port with fresh in-memory data for every test, so they never touch your `data.json`. They need Python 3.10+.
@@ -169,6 +180,7 @@ apartment_booking/
   static/         CSS and the JavaScript that sends forms to the API
   cli.py          command-line interface
 tests/            unit tests (service, API, pages, OpenAPI spec)
+api_tests/        black-box HTTP tests for the REST API
 e2e/              browser tests (Playwright, Chromium)
 scripts/          end-to-end smoke test
 ```
@@ -183,8 +195,9 @@ GitHub Actions (`.github/workflows/ci.yml`) runs on every push to `main` and on 
 
 - **Docker tests**: builds the test image for each Python version from 3.9 to 3.13 and runs the unit tests inside it.
 - **Code coverage**: measures coverage with [coverage.py](https://coverage.readthedocs.io/) and fails if it drops below 90%. The report is shown in the run summary and uploaded as the `coverage-html` artifact.
+- **HTTP API tests**: runs `api_tests/` against the app started in-process.
 - **Browser tests**: installs Playwright and Chromium and runs the `e2e/` tests against the web UI.
-- **Docker Compose end-to-end**: starts the app with Compose, runs `scripts/smoke_test.py`, restarts it to check that data persists, and runs the CLI and the tests through Compose.
+- **Docker Compose end-to-end**: starts the app with Compose, runs `scripts/smoke_test.py` and the `api_tests/` suite against it, restarts it to check that data persists, and runs the CLI and the tests through Compose.
 
 To build for a specific Python version locally:
 
