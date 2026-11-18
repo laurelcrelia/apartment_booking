@@ -26,6 +26,8 @@ booking change ID [--from DATE] [--to DATE] [--apartment ID] [--guest NAME]
 booking cancel ID
 Options (any command):
 --json                print results as JSON
+--apartments-url URL  apartments service (default: $APARTMENTS_URL); if unset,
+                      apartments are read from --apartments-db
 --apartments-db PATH  apartments database (default: $APARTMENTS_DB or ./apartments.db)
 --bookings-db PATH    bookings database (default: $BOOKINGS_DB or ./bookings.db)
 Dates are YYYY-MM-DD; --to is the check-out day (exclusive).
@@ -43,6 +45,7 @@ class _HelpAction(argparse.Action):
 
 def build_parser() -> argparse.ArgumentParser:
     common = argparse.ArgumentParser(add_help=False)
+    common.add_argument("--apartments-url", default=os.environ.get("APARTMENTS_URL"))
     common.add_argument("--apartments-db", default=os.environ.get("APARTMENTS_DB", "apartments.db"))
     common.add_argument("--bookings-db", default=os.environ.get("BOOKINGS_DB", "bookings.db"))
     common.add_argument("--json", action="store_true")
@@ -151,7 +154,7 @@ def main(argv=None) -> int:
         print(HELP, end="")
         return 0
     args = build_parser().parse_args(argv)
-    svc = open_service(args.apartments_db, args.bookings_db)
+    svc = open_service(args.apartments_db, args.bookings_db, args.apartments_url)
     try:
         message, result = run(args, svc)
     except BookingError as e:

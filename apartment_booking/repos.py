@@ -1,26 +1,14 @@
-"""SQLite repositories for apartments and bookings.
+"""SQLite repository for bookings. Rows are returned as plain dicts in the API's shape.
 
-Apartments and bookings live in separate database files with no foreign key
-between them, because they will belong to separate services. Rows are returned
-as plain dicts in the same shape as the API.
+Bookings refer to apartments by ID only. Apartments belong to the apartments
+service and live in its own database, so there is no foreign key.
 """
 from __future__ import annotations
 
 from contextlib import contextmanager
 from pathlib import Path
 
-from .db import Database
-
-APARTMENTS_SCHEMA = """
-CREATE TABLE IF NOT EXISTS apartments (
-    id      INTEGER PRIMARY KEY AUTOINCREMENT,  -- AUTOINCREMENT: IDs are never reused
-    name    TEXT    NOT NULL,
-    address TEXT    NOT NULL DEFAULT '',
-    rooms   INTEGER NOT NULL,
-    price   REAL    NOT NULL,
-    version INTEGER NOT NULL DEFAULT 1          -- bumped on every change
-);
-"""
+from common.db import Database
 
 BOOKINGS_SCHEMA = """
 CREATE TABLE IF NOT EXISTS bookings (
@@ -34,50 +22,11 @@ CREATE TABLE IF NOT EXISTS bookings (
 CREATE INDEX IF NOT EXISTS bookings_by_apartment ON bookings (apartment_id, status);
 """
 
-APARTMENT_COLUMNS = "id, name, address, rooms, price"
 BOOKING_COLUMNS = "id, apartment_id, guest, check_in, check_out, status"
 
 
 def _dict(row) -> dict | None:
     return None if row is None else dict(row)
-
-
-class ApartmentRepo:
-    def __init__(self, path: str | Path):
-        self.db = Database(path, APARTMENTS_SCHEMA)
-
-    def add(self, name: str, address: str, rooms: int, price: float) -> dict:
-        with self.db.transaction() as conn:
-            cur = conn.execute("INSERT INTO apartments (name, address, rooms, price) VALUES (?, ?, ?, ?)",
-                               (name, address, rooms, price))
-            return self._get(conn, cur.lastrowid)
-
-    def get(self, apt_id: int) -> dict | None:
-        with self.db.transaction() as conn:
-            return self._get(conn, apt_id)
-
-    def list(self) -> list[dict]:
-        with self.db.transaction() as conn:
-            rows = conn.execute(f"SELECT {APARTMENT_COLUMNS} FROM apartments ORDER BY id")
-            return [dict(r) for r in rows]
-
-    def update(self, apt_id: int, **fields) -> dict | None:
-        """Change the given columns; returns the updated row, or None if it doesn't exist."""
-        with self.db.transaction() as conn:
-            if fields:
-                assignments = ", ".join(f"{column} = ?" for column in fields)
-                conn.execute(f"UPDATE apartments SET {assignments}, version = version + 1 WHERE id = ?",
-                             (*fields.values(), apt_id))
-            return self._get(conn, apt_id)
-
-    def delete(self, apt_id: int) -> bool:
-        with self.db.transaction() as conn:
-            return conn.execute("DELETE FROM apartments WHERE id = ?", (apt_id,)).rowcount == 1
-
-    @staticmethod
-    def _get(conn, apt_id: int) -> dict | None:
-        return _dict(conn.execute(f"SELECT {APARTMENT_COLUMNS} FROM apartments WHERE id = ?",
-                                  (apt_id,)).fetchone())
 
 
 class BookingTable:

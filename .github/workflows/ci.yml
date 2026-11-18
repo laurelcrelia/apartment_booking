@@ -58,7 +58,7 @@ jobs:
         run: pip install -r requirements-dev.txt
 
       - name: Run tests with coverage
-        run: coverage run --source=apartment_booking -m unittest -v
+        run: coverage run --source=apartment_booking,apartments_service,common -m unittest -v
 
       - name: Coverage report
         run: |
@@ -132,6 +132,14 @@ jobs:
           docker compose down
           docker compose up -d --wait
           curl -fsS http://localhost:8000/api/apartments/${{ steps.smoke.outputs.KEPT_APARTMENT_ID }}
+
+      - name: Apartments service down gives 503, bookings keep working
+        run: |
+          docker compose stop apartments
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8000/api/apartments)" = 503
+          curl -fsS http://localhost:8000/api/bookings
+          docker compose start apartments
+          docker compose up -d --wait
 
       - name: CLI shares the data volume
         run: docker compose run --rm booking apartment view ${{ steps.smoke.outputs.KEPT_APARTMENT_ID }}

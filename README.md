@@ -6,6 +6,13 @@ Authors: Laurel Matt and Kleidi Gjeta
 
 Web app for managing apartments and bookings, with availability search and overlap prevention. It has web forms for every workflow, a REST API documented with OpenAPI, and a command-line interface. All three share the same data.
 
+The backend is being split into microservices (see [documentation/microservices-plan.md](documentation/microservices-plan.md)). Apartments already run as their own **apartments service** with their own database. The web app owns bookings, serves the UI and the public REST API, and calls the apartments service over HTTP:
+
+```
+browser / CLI ──► web (apartment_booking) ──HTTP──► apartments (apartments_service)
+                  bookings.db                        apartments.db
+```
+
 ## Quick start (Docker)
 
 Requires Docker with Compose v2. No local Python needed. From a fresh checkout:
@@ -21,17 +28,29 @@ cd apartment_booking
 | Open the app | <http://localhost:8000> |
 | Stop the app (data is kept) | `docker compose down` |
 | Run the tests | `docker compose --profile test run --rm --build tests` |
-| View server logs | `docker compose logs -f web` |
+| View server logs | `docker compose logs -f web apartments` (Ctrl+C to stop following) |
 | Delete all data | `docker compose down -v` |
 
-`--wait` returns once the app passes its health check (`/api/health`). The app listens only on `127.0.0.1`, so it can't be reached from other machines.
+Compose starts two containers from the same image: `web` and `apartments`. `--wait` returns once both pass their health checks (`/api/health`). Only `web` is published, on `127.0.0.1`, so it can't be reached from other machines; `apartments` is reachable only inside the Compose network. If `apartments` is down, the API answers `503 service_unavailable` for anything that needs apartments, while booking listings keep working.
 
-Data is stored in two SQLite databases in the `booking-data` Docker volume: `/data/apartments.db` and `/data/bookings.db`. They survive `docker compose down` and image rebuilds; only `docker compose down -v` deletes them.
+Each service has its own volume and SQLite database: bookings in `booking-data` (`/data/bookings.db`) and apartments in `apartments-data` (`/data/apartments.db`). They survive `docker compose down` and image rebuilds; only `docker compose down -v` deletes them.
 
-**Upgrading from the JSON version:** older versions kept everything in `/data/data.json`. Copy it into the databases once, keeping all IDs:
+**Upgrading from the JSON version** (everything in `/data/data.json`): start the new version once so both volumes exist, then copy the data in, keeping all IDs:
 
 ```sh
-docker compose run --rm --entrypoint python booking -m apartment_booking.migrate /data/data.json
+docker compose up -d --build --wait
+docker compose run --rm --no-deps -v apartments-data:/apartments --entrypoint python booking \
+  -m apartment_booking.migrate /data/data.json --apartments-db /apartments/apartments.db
+```
+
+**Upgrading from the first SQLite version** (`apartments.db` still in `booking-data`): move it to the apartments service's volume:
+
+```sh
+docker compose up -d --build --wait
+docker compose stop apartments
+docker compose run --rm --no-deps -v booking-data:/old --entrypoint sh apartments \
+  -c 'rm -f /data/apartments.db*; cp /old/apartments.db /data/'
+docker compose start apartments
 ```
 
 ## Using the web app
@@ -144,7 +163,20 @@ python3 booking.py --help                           # CLI
 python3 -m unittest -v                              # tests
 ```
 
-Without Docker, data is stored in `./apartments.db` and `./bookings.db`. Override them with the `APARTMENTS_DB` and `BOOKINGS_DB` environment variables, or `--apartments-db PATH` and `--bookings-db PATH` for the CLI. To import an old `data.json`, run `python3 -m apartment_booking.migrate data.json`.
+Started like this, the web app serves apartments in-process from `./apartments.db` and keeps bookings in `./bookings.db`. That is the simplest way to develop. To run the two services separately, as in Docker:
+
+```sh
+APARTMENTS_DB=apartments.db flask --app apartments_service.app run --port 8001   # apartments service
+APARTMENTS_URL=http://localhost:8001 flask --app apartment_booking.web run --port 8000
+```
+
+| Variable | Used by | Default | Meaning |
+|---|---|---|---|
+| `BOOKINGS_DB` | web, CLI | `bookings.db` | bookings database |
+| `APARTMENTS_URL` | web, CLI | unset | apartments service to call; if unset, apartments are served in-process |
+| `APARTMENTS_DB` | apartments service, or web/CLI without `APARTMENTS_URL` | `apartments.db` | apartments database |
+
+The CLI takes the same settings as `--bookings-db`, `--apartments-url` and `--apartments-db`. To import an old `data.json`, run `python3 -m apartment_booking.migrate data.json`.
 
 `scripts/smoke_test.py` runs every workflow against a running server and cleans up afterwards: `python3 scripts/smoke_test.py http://localhost:8000`.
 
@@ -176,11 +208,10 @@ HEADED=1 python -m unittest discover -s e2e  # watch them in a browser window
 ## Project layout
 
 ```
-apartment_booking/
-  service.py      business rules (shared by web app and CLI)
-  repos.py        SQLite repositories for apartments and bookings
-  db.py           SQLite connections and transactions
-  errors.py       errors shown to the user
+apartment_booking/  web app: UI, public REST API, bookings
+  service.py      booking rules (shared by web app and CLI)
+  repos.py        SQLite repository for bookings
+  apartments_client.py  HTTP client for the apartments service
   migrate.py      one-off import of the old data.json
   api.py          REST API under /api
   openapi.yaml    API specification
@@ -188,13 +219,21 @@ apartment_booking/
   templates/      page templates
   static/         CSS and the JavaScript that sends forms to the API
   cli.py          command-line interface
+apartments_service/  apartments service: internal JSON API for apartments
+  app.py          Flask app (/api/apartments, /api/health)
+  service.py      apartment rules
+  repo.py         SQLite repository for apartments
+common/           shared by both services
+  db.py           SQLite connections and transactions
+  http.py         JSON errors and request parsing
+  errors.py       errors shown to the user
 tests/            unit tests (service, API, pages, OpenAPI spec)
 api_tests/        black-box HTTP tests for the REST API
 e2e/              browser tests (Playwright, Chromium)
 scripts/          end-to-end smoke test
 ```
 
-Apartments and bookings are kept in separate SQLite databases, as a first step towards separate services. Each write runs in its own transaction, and booking writes take the database's write lock before checking for overlaps, so two requests can never double-book an apartment. That makes it safe to run several gunicorn workers (the Docker image uses two, with four threads each).
+Apartments and bookings are kept in separate SQLite databases owned by separate services. Each write runs in its own transaction, and booking writes take the database's write lock before checking for overlaps, so two requests can never double-book an apartment. That makes it safe to run several gunicorn workers (the Docker image uses two, with four threads each).
 
 A plan to split apartments into their own microservice (SQLite per service, HTTP plus RabbitMQ events) is described, with architecture diagrams, in [documentation/microservices-plan.md](documentation/microservices-plan.md).
 
@@ -206,7 +245,7 @@ GitHub Actions (`.github/workflows/ci.yml`) runs on every push to `main` and on 
 - **Code coverage**: measures coverage with [coverage.py](https://coverage.readthedocs.io/) and fails if it drops below 90%. The report is shown in the run summary and uploaded as the `coverage-html` artifact.
 - **HTTP API tests**: runs `api_tests/` against the app started in-process.
 - **Browser tests**: installs Playwright and Chromium and runs the `e2e/` tests against the web UI.
-- **Docker Compose end-to-end**: starts the app with Compose, runs `scripts/smoke_test.py` and the `api_tests/` suite against it, restarts it to check that data persists, and runs the CLI and the tests through Compose.
+- **Docker Compose end-to-end**: starts the app with Compose, runs `scripts/smoke_test.py` and the `api_tests/` suite against it, restarts it to check that data persists, stops the apartments service to check for `503`, and runs the CLI and the tests through Compose.
 
 To build for a specific Python version locally:
 

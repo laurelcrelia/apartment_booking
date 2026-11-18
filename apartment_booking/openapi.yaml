@@ -16,6 +16,8 @@ info:
       listings unless `include_cancelled=true`.
     - Unknown fields in a request body are rejected with `400`.
     - Every error response has the same shape (see `Error`).
+    - Apartments are managed by a separate apartments service behind this API.
+      Requests that need it answer `503` while it is unreachable.
 servers:
   - url: /api
 tags:
@@ -61,6 +63,8 @@ paths:
                 - {id: 2, name: Studio, address: 2 Main St, rooms: 1, price: 55.0}
         "400":
           $ref: "#/components/responses/ValidationError"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
     post:
       tags: [Apartments]
       operationId: createApartment
@@ -87,6 +91,8 @@ paths:
           $ref: "#/components/responses/ValidationError"
         "415":
           $ref: "#/components/responses/UnsupportedMediaType"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
 
   /apartments/{apartment_id}:
     parameters:
@@ -104,6 +110,8 @@ paths:
               example: {id: 1, name: Loft, address: 1 Beach Rd, rooms: 2, price: 80.0}
         "404":
           $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
     patch:
       tags: [Apartments]
       operationId: updateApartment
@@ -128,6 +136,8 @@ paths:
           $ref: "#/components/responses/NotFound"
         "415":
           $ref: "#/components/responses/UnsupportedMediaType"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
     delete:
       tags: [Apartments]
       operationId: deleteApartment
@@ -147,6 +157,8 @@ paths:
                 error:
                   code: conflict
                   message: Apartment 1 has active bookings (3); cancel them first
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
 
   /bookings:
     get:
@@ -209,6 +221,8 @@ paths:
           $ref: "#/components/responses/Overlap"
         "415":
           $ref: "#/components/responses/UnsupportedMediaType"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
 
   /bookings/{booking_id}:
     parameters:
@@ -279,6 +293,8 @@ paths:
                       message: Booking 1 is cancelled and cannot be changed
         "415":
           $ref: "#/components/responses/UnsupportedMediaType"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
 
   /health:
     get:
@@ -393,7 +409,7 @@ components:
             code:
               type: string
               description: Machine-readable error type.
-              enum: [validation_error, not_found, conflict, unsupported_media_type, method_not_allowed]
+              enum: [validation_error, not_found, conflict, unsupported_media_type, method_not_allowed, service_unavailable]
             message:
               type: string
               description: Human-readable explanation.
@@ -429,6 +445,17 @@ components:
             error:
               code: conflict
               message: Apartment 1 is already booked from 2026-11-01 to 2026-11-05 (booking 1)
+    ServiceUnavailable:
+      description: |
+        The apartments service, which this request depends on, could not be
+        reached. Try again later.
+      content:
+        application/json:
+          schema: {$ref: "#/components/schemas/Error"}
+          example:
+            error:
+              code: service_unavailable
+              message: The apartments service is unavailable; try again later
     UnsupportedMediaType:
       description: The request body was not sent as `application/json`.
       content:

@@ -1,11 +1,12 @@
 services:
-  web:
+  # Apartments service: internal only (no published port), with its own database.
+  apartments:
     build: .
     image: apartment-booking
-    ports:
-      - "127.0.0.1:${APP_PORT:-8000}:8000"
+    command: ["gunicorn", "--bind", "0.0.0.0:8000", "--workers", "2", "--threads", "4",
+              "--access-logfile", "-", "apartments_service.app:create_app()"]
     volumes:
-      - booking-data:/data
+      - apartments-data:/data
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health')"]
@@ -14,15 +15,41 @@ services:
       retries: 3
       start_period: 5s
 
-  # Command-line interface, sharing the web app's data volume:
+  # Web UI, public REST API and bookings; calls the apartments service over HTTP.
+  web:
+    build: .
+    image: apartment-booking
+    ports:
+      - "127.0.0.1:${APP_PORT:-8000}:8000"
+    environment:
+      APARTMENTS_URL: http://apartments:8000
+    volumes:
+      - booking-data:/data
+    depends_on:
+      apartments:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health')"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+
+  # Command-line interface, sharing the web app's data volume and apartments service:
   #   docker compose run --rm booking apartment list
   booking:
     build: .
     image: apartment-booking
     entrypoint: ["python", "booking.py"]
     command: ["--help"]
+    environment:
+      APARTMENTS_URL: http://apartments:8000
     volumes:
       - booking-data:/data
+    depends_on:
+      apartments:
+        condition: service_healthy
     profiles: ["cli"]
 
   tests:
@@ -33,6 +60,8 @@ services:
     profiles: ["test"]
 
 volumes:
+  # Names are overridable so CI on a developer machine never touches the real data.
   booking-data:
-    # Overridable so CI on a developer machine never touches the real data.
     name: ${BOOKING_VOLUME:-booking-data}
+  apartments-data:
+    name: ${APARTMENTS_VOLUME:-apartments-data}

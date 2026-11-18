@@ -18,6 +18,8 @@ COPY requirements.txt ./
 RUN pip install -r requirements.txt
 
 COPY booking.py ./
+COPY common/ ./common/
+COPY apartments_service/ ./apartments_service/
 COPY apartment_booking/ ./apartment_booking/
 
 # Test image: adds dev dependencies and the tests. Build with --target test.
@@ -29,7 +31,8 @@ USER app
 ENTRYPOINT ["python", "-m", "unittest"]
 CMD ["-v"]
 
-# Runtime image (default): serves the web app on port 8000.
+# Runtime image (default): serves the web app on port 8000. The same image runs
+# the apartments service with a different command (see compose.yaml).
 FROM base AS runtime
 USER app
 VOLUME ["/data"]

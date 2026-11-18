@@ -13,7 +13,9 @@ import json
 import os
 import sys
 
-from .repos import ApartmentRepo, BookingRepo
+from apartments_service.repo import ApartmentRepo
+
+from .repos import BookingRepo
 
 
 class MigrationError(Exception):

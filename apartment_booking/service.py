@@ -3,19 +3,21 @@
 Date ranges are half-open: [check_in, check_out). A booking checking out on
 the same day another checks in does not overlap with it.
 
-ApartmentService owns apartments. BookingService owns bookings and reaches
-apartments only through ApartmentService's methods, so apartments can later
-move into their own service without changing the booking rules.
+BookingService owns bookings. It reaches apartments through an object with
+get/list/add/update/delete: either the apartments service's ApartmentService
+in the same process, or HttpApartments, which calls that service over HTTP.
 """
 from __future__ import annotations
 
 from datetime import date
 
-from .errors import BookingError, ConflictError, NotFoundError, OverlapError
-from .repos import ApartmentRepo, BookingRepo
+from common.errors import (BookingError, ConflictError, NotFoundError, OverlapError,
+                           ServiceUnavailableError)
 
-__all__ = ["ACTIVE", "CANCELLED", "ApartmentService", "BookingError", "BookingService",
-           "ConflictError", "NotFoundError", "OverlapError", "open_service", "parse_date"]
+from .repos import BookingRepo
+
+__all__ = ["ACTIVE", "CANCELLED", "BookingError", "BookingService", "ConflictError",
+           "NotFoundError", "OverlapError", "ServiceUnavailableError", "open_service", "parse_date"]
 
 ACTIVE = "active"
 CANCELLED = "cancelled"
@@ -33,60 +35,8 @@ def _validate_range(check_in: date, check_out: date) -> None:
         raise BookingError("Check-out date must be after check-in date")
 
 
-class ApartmentService:
-    def __init__(self, repo: ApartmentRepo):
-        self.repo = repo
-
-    def add(self, name: str, address: str, rooms: int = 1, price: float = 0.0) -> dict:
-        name = (name or "").strip()
-        if not name:
-            raise BookingError("Apartment name is required")
-        if rooms < 1:
-            raise BookingError("Rooms must be at least 1")
-        if price < 0:
-            raise BookingError("Price cannot be negative")
-        return self.repo.add(name, address or "", rooms, price)
-
-    def get(self, apt_id: int) -> dict:
-        apt = self.repo.get(apt_id)
-        if apt is None:
-            raise NotFoundError(f"Apartment {apt_id} not found")
-        return apt
-
-    def list(self) -> list[dict]:
-        return self.repo.list()
-
-    def update(self, apt_id: int, name=None, address=None, rooms=None, price=None) -> dict:
-        self.get(apt_id)
-        changes = {}
-        if name is not None:
-            if not name.strip():
-                raise BookingError("Apartment name cannot be empty")
-            changes["name"] = name.strip()
-        if address is not None:
-            changes["address"] = address
-        if rooms is not None:
-            if rooms < 1:
-                raise BookingError("Rooms must be at least 1")
-            changes["rooms"] = rooms
-        if price is not None:
-            if price < 0:
-                raise BookingError("Price cannot be negative")
-            changes["price"] = price
-        apt = self.repo.update(apt_id, **changes)
-        if apt is None:
-            raise NotFoundError(f"Apartment {apt_id} not found")
-        return apt
-
-    def delete(self, apt_id: int) -> dict:
-        apt = self.get(apt_id)
-        if not self.repo.delete(apt_id):
-            raise NotFoundError(f"Apartment {apt_id} not found")
-        return apt
-
-
 class BookingService:
-    def __init__(self, bookings: BookingRepo, apartments: ApartmentService):
+    def __init__(self, bookings: BookingRepo, apartments):
         self.bookings = bookings
         self.apartments = apartments
 
@@ -107,14 +57,15 @@ class BookingService:
     def remove_apartment(self, apt_id: int) -> dict:
         # Check, then delete: the two live in different databases, so this can't
         # be one transaction. Accepted; see documentation/microservices-plan.md.
-        self.apartments.get(apt_id)
+        apt = self.apartments.get(apt_id)
         with self.bookings.reading() as table:
             active = table.list(apt_id=apt_id)
         if active:
             ids = ", ".join(str(b["id"]) for b in active)
             raise ConflictError(
                 f"Apartment {apt_id} has active bookings ({ids}); cancel them first")
-        return self.apartments.delete(apt_id)
+        self.apartments.delete(apt_id)
+        return apt
 
     # ---------- bookings ----------
 
@@ -192,6 +143,20 @@ class BookingService:
                 f"to {b['check_out']} (booking {b['id']})")
 
 
-def open_service(apartments_db: str = ":memory:", bookings_db: str = ":memory:") -> BookingService:
-    """Build the service on two SQLite databases; the defaults keep everything in memory."""
-    return BookingService(BookingRepo(bookings_db), ApartmentService(ApartmentRepo(apartments_db)))
+def open_service(apartments_db: str = ":memory:", bookings_db: str = ":memory:",
+                 apartments_url: str | None = None) -> BookingService:
+    """Build the booking service on its SQLite database.
+
+    With apartments_url, apartments come from the apartments service over HTTP.
+    Without it, the apartments service runs in this process on apartments_db,
+    which keeps tests and a plain `flask run` down to one process. The
+    defaults keep everything in memory.
+    """
+    if apartments_url:
+        from .apartments_client import HttpApartments
+        apartments = HttpApartments(apartments_url)
+    else:
+        from apartments_service.repo import ApartmentRepo
+        from apartments_service.service import ApartmentService
+        apartments = ApartmentService(ApartmentRepo(apartments_db))
+    return BookingService(BookingRepo(bookings_db), apartments)

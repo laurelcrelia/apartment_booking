@@ -11,19 +11,27 @@ from datetime import date
 from flask import Blueprint, Flask, abort, current_app, render_template, request
 from werkzeug.exceptions import HTTPException
 
-from .api import api, handle_http_error
-from .service import BookingService, NotFoundError, open_service
+from common.http import handle_http_error
+
+from .api import api
+from .service import BookingService, NotFoundError, ServiceUnavailableError, open_service
 
 pages = Blueprint("pages", __name__)
 
 
 def create_app(service: BookingService | None = None) -> Flask:
-    """Build the app; without a service it opens the SQLite files named by
-    $APARTMENTS_DB and $BOOKINGS_DB (default: apartments.db and bookings.db)."""
+    """Build the app; without a service it is configured from the environment:
+
+    BOOKINGS_DB     bookings database (default: bookings.db)
+    APARTMENTS_URL  apartments service, e.g. http://apartments:8000; if unset,
+                    apartments are served in-process from APARTMENTS_DB
+                    (default: apartments.db)
+    """
     app = Flask(__name__)
     if service is None:
         service = open_service(os.environ.get("APARTMENTS_DB", "apartments.db"),
-                               os.environ.get("BOOKINGS_DB", "bookings.db"))
+                               os.environ.get("BOOKINGS_DB", "bookings.db"),
+                               os.environ.get("APARTMENTS_URL"))
     app.extensions["booking_service"] = service
     app.register_blueprint(api)
     app.register_blueprint(pages)
@@ -33,6 +41,11 @@ def create_app(service: BookingService | None = None) -> Flask:
 
 def svc():
     return current_app.extensions["booking_service"]
+
+
+@pages.errorhandler(ServiceUnavailableError)
+def service_unavailable(e: ServiceUnavailableError):
+    return render_template("unavailable.html", message=str(e)), 503
 
 
 @pages.app_template_filter("nights")

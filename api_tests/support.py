@@ -31,26 +31,40 @@ _base_url: str | None = None
 
 
 def start_local_server() -> str:
+    """Start the apartments service and the booking web app on free ports,
+    talking to each other over HTTP like the deployed services; returns the
+    web app's URL."""
     from werkzeug.serving import WSGIRequestHandler, make_server
 
     from apartment_booking.service import open_service
     from apartment_booking.web import create_app
+    from apartments_service.app import create_app as create_apartments_app
+    from apartments_service.repo import ApartmentRepo
+    from apartments_service.service import ApartmentService
 
     class QuietHandler(WSGIRequestHandler):
         def log_request(self, *args):
             pass
 
+    def serve(app):
+        server = make_server("127.0.0.1", 0, app, threaded=True, request_handler=QuietHandler)
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        servers.append(server)
+        return f"http://127.0.0.1:{server.server_port}"
+
     tmp = tempfile.TemporaryDirectory()
-    app = create_app(open_service(os.path.join(tmp.name, "apartments.db"),
-                                  os.path.join(tmp.name, "bookings.db")))
-    server = make_server("127.0.0.1", 0, app, threaded=True, request_handler=QuietHandler)
-    threading.Thread(target=server.serve_forever, daemon=True).start()
+    servers = []
+    apartments = ApartmentService(ApartmentRepo(os.path.join(tmp.name, "apartments.db")))
+    apartments_url = serve(create_apartments_app(apartments))
+    web_url = serve(create_app(open_service(bookings_db=os.path.join(tmp.name, "bookings.db"),
+                                            apartments_url=apartments_url)))
 
     def stop():
-        server.shutdown()
+        for server in servers:
+            server.shutdown()
         tmp.cleanup()
     atexit.register(stop)
-    return f"http://127.0.0.1:{server.server_port}"
+    return web_url
 
 
 def base_url() -> str:

@@ -8,7 +8,8 @@ from contextlib import closing, redirect_stderr, redirect_stdout
 from io import StringIO
 
 from apartment_booking.migrate import MigrationError, main, migrate
-from apartment_booking.repos import ApartmentRepo, BookingRepo
+from apartment_booking.repos import BookingRepo
+from apartments_service.repo import ApartmentRepo
 from apartment_booking.service import OverlapError, open_service
 
 

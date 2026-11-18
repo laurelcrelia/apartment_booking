@@ -1,4 +1,4 @@
-"""Errors raised by the service layer; the message is shown to the user."""
+"""Errors raised by the services; the message is shown to the user."""
 
 
 class BookingError(Exception):
@@ -15,3 +15,7 @@ class ConflictError(BookingError):
 
 class OverlapError(ConflictError):
     pass
+
+
+class ServiceUnavailableError(BookingError):
+    """Another service needed for the request could not be reached."""
