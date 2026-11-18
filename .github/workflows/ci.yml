@@ -117,6 +117,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Create .env with a throwaway RabbitMQ password
+        run: |
+          password=$(openssl rand -hex 24)
+          echo "::add-mask::$password"
+          printf 'RABBITMQ_PASSWORD=%s\n' "$password" > .env
+
       - name: Start app
         run: docker compose up -d --build --wait
 

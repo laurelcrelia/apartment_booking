@@ -25,7 +25,10 @@ Requires Docker with Compose v2. No local Python needed. From a fresh checkout:
 ```sh
 git clone https://github.com/laurelcrelia/apartment_booking.git
 cd apartment_booking
+printf 'RABBITMQ_PASSWORD=%s\n' "$(openssl rand -hex 24)" > .env   # once: creates your local secrets
 ```
+
+Compose won't start without `.env`; see [Secrets](#secrets).
 
 | Task | Command |
 |---|---|
@@ -44,13 +47,34 @@ Compose starts five containers:
 | `apartments` | apartments service (internal only) |
 | `apartments-relay` | publishes the apartments service's events to RabbitMQ |
 | `booking-consumer` | updates the booking side's apartments replica from those events |
-| `rabbitmq` | message broker; management UI on <http://localhost:15672> (user and password `booking`) |
+| `rabbitmq` | message broker; management UI on <http://localhost:15672> (log in with `RABBITMQ_USER`, default `booking`, and your `RABBITMQ_PASSWORD` from `.env`) |
 
 `--wait` returns once everything is up and healthy. Only `web` and the RabbitMQ UI are published, on `127.0.0.1`, so they can't be reached from other machines. If `apartments` is down, the API answers `503 service_unavailable` for apartment pages and changes, while bookings (including creating them) and availability search keep working from the replica.
 
 Each service has its own volume and SQLite database: bookings in `booking-data` (`/data/bookings.db`) and apartments in `apartments-data` (`/data/apartments.db`); RabbitMQ keeps its queues in `rabbitmq-data`. They survive `docker compose down` and image rebuilds; only `docker compose down -v` deletes them.
 
 After an upgrade, apartments that existed before events did are announced once automatically when `apartments-relay` first starts, so the replica learns about them.
+
+### Secrets
+
+The only secret is the RabbitMQ login. It is never stored in the repository: Compose reads it from a `.env` file next to `compose.yaml` (or from environment variables), and refuses to start if `RABBITMQ_PASSWORD` is missing. `.env` is git-ignored and excluded from the Docker build context, so it can't end up in a commit or an image. `.env.example` lists the settings:
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `RABBITMQ_PASSWORD` | (required) | RabbitMQ password; letters and digits only, since it goes into an `amqp://` URL |
+| `RABBITMQ_USER` | `booking` | RabbitMQ user name |
+
+The relay and consumer get the login as `RABBITMQ_URL`, which Compose builds from these. CI generates a new random password for every run, so the pipelines need no stored secret.
+
+RabbitMQ only applies the login when its `rabbitmq-data` volume is first created. To change the password later, change it in RabbitMQ too, then restart the services that connect:
+
+```sh
+docker compose exec rabbitmq rabbitmqctl change_password booking 'NEW_PASSWORD'
+# put NEW_PASSWORD into .env, then:
+docker compose up -d
+```
+
+**Upgrading from a version with the built-in `booking`/`booking` login:** either keep that password (`RABBITMQ_PASSWORD=booking` in `.env`) or change it as above.
 
 **Upgrading from the JSON version** (everything in `/data/data.json`): start the new version once so both volumes exist, then copy the data in, keeping all IDs:
 
@@ -184,7 +208,8 @@ Started like this, the web app serves apartments in-process from `./apartments.d
 
 ```sh
 docker compose up -d rabbitmq                                                    # or any RabbitMQ
-export RABBITMQ_URL=amqp://booking:booking@localhost:5672/                       # needs port 5672 published
+set -a; . ./.env; set +a                                                         # RABBITMQ_PASSWORD
+export RABBITMQ_URL=amqp://booking:$RABBITMQ_PASSWORD@localhost:5672/            # needs port 5672 published
 APARTMENTS_DB=apartments.db flask --app apartments_service.app run --port 8001   # apartments service
 APARTMENTS_DB=apartments.db python -m apartments_service.relay                   # relay
 python -m apartment_booking.consumer                                             # consumer
@@ -196,7 +221,7 @@ APARTMENTS_URL=http://localhost:8001 flask --app apartment_booking.web run --por
 | `BOOKINGS_DB` | web, CLI | `bookings.db` | bookings database |
 | `APARTMENTS_URL` | web, CLI | unset | apartments service to call; if unset, apartments are served in-process |
 | `APARTMENTS_DB` | apartments service, relay, or web/CLI without `APARTMENTS_URL` | `apartments.db` | apartments database |
-| `RABBITMQ_URL` | relay, consumer | (required) | RabbitMQ to publish to or consume from |
+| `RABBITMQ_URL` | relay, consumer | (required) | RabbitMQ to publish to or consume from, including the login |
 
 The CLI takes the same settings as `--bookings-db`, `--apartments-url` and `--apartments-db`. To import an old `data.json`, run `python3 -m apartment_booking.migrate data.json`.
 

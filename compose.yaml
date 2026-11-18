@@ -1,13 +1,17 @@
-x-rabbitmq-url: &rabbitmq-url amqp://booking:booking@rabbitmq:5672/
+# Credentials come from the environment or a git-ignored .env file next to this
+# file (see .env.example); nothing secret is stored in the repository. Compose
+# refuses to start without RABBITMQ_PASSWORD.
+x-rabbitmq-url: &rabbitmq-url "amqp://${RABBITMQ_USER:-booking}:${RABBITMQ_PASSWORD:?Set RABBITMQ_PASSWORD in .env, see .env.example}@rabbitmq:5672/"
 
 services:
   # Message broker for events between services. Management UI:
-  # http://localhost:15672 (user and password: booking).
+  # http://localhost:15672 (log in with RABBITMQ_USER and RABBITMQ_PASSWORD).
   rabbitmq:
     image: rabbitmq:4.1-management
     environment:
-      RABBITMQ_DEFAULT_USER: booking
-      RABBITMQ_DEFAULT_PASS: booking
+      # Only used when the rabbitmq-data volume is first created.
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-booking}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:?Set RABBITMQ_PASSWORD in .env, see .env.example}
     ports:
       - "127.0.0.1:${RABBITMQ_UI_PORT:-15672}:15672"
     volumes:

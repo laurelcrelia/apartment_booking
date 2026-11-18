@@ -4,6 +4,8 @@
 **/__pycache__
 **/*.pyc
 *.tmp
+# Local secrets (see .env.example)
+.env
 data.json
 *.db
 *.db-wal

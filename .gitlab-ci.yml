@@ -74,6 +74,8 @@ playwright:
 compose-e2e:
   stage: e2e
   script:
+    # Throwaway RabbitMQ password for this job; after_script reads the same .env.
+    - printf 'RABBITMQ_PASSWORD=%s\n' "$(openssl rand -hex 24)" > .env
     - docker compose up -d --build --wait
     - python3 scripts/smoke_test.py http://localhost:$APP_PORT --keep > smoke.log || { cat smoke.log; exit 1; }
     - cat smoke.log
