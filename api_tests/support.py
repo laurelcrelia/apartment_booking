@@ -33,7 +33,7 @@ _base_url: str | None = None
 def start_local_server() -> str:
     from werkzeug.serving import WSGIRequestHandler, make_server
 
-    from apartment_booking.storage import JsonStorage
+    from apartment_booking.service import open_service
     from apartment_booking.web import create_app
 
     class QuietHandler(WSGIRequestHandler):
@@ -41,7 +41,8 @@ def start_local_server() -> str:
             pass
 
     tmp = tempfile.TemporaryDirectory()
-    app = create_app(JsonStorage(os.path.join(tmp.name, "data.json")))
+    app = create_app(open_service(os.path.join(tmp.name, "apartments.db"),
+                                  os.path.join(tmp.name, "bookings.db")))
     server = make_server("127.0.0.1", 0, app, threaded=True, request_handler=QuietHandler)
     threading.Thread(target=server.serve_forever, daemon=True).start()
 

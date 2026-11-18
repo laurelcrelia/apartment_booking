@@ -26,7 +26,13 @@ cd apartment_booking
 
 `--wait` returns once the app passes its health check (`/api/health`). The app listens only on `127.0.0.1`, so it can't be reached from other machines.
 
-Data is stored in the `booking-data` Docker volume as `/data/data.json`. It survives `docker compose down` and image rebuilds; only `docker compose down -v` deletes it.
+Data is stored in two SQLite databases in the `booking-data` Docker volume: `/data/apartments.db` and `/data/bookings.db`. They survive `docker compose down` and image rebuilds; only `docker compose down -v` deletes them.
+
+**Upgrading from the JSON version:** older versions kept everything in `/data/data.json`. Copy it into the databases once, keeping all IDs:
+
+```sh
+docker compose run --rm --entrypoint python booking -m apartment_booking.migrate /data/data.json
+```
 
 ## Using the web app
 
@@ -138,7 +144,7 @@ python3 booking.py --help                           # CLI
 python3 -m unittest -v                              # tests
 ```
 
-Without Docker, data is stored in `./data.json`. Override it with the `APT_DATA_FILE` environment variable, or `--data PATH` for the CLI.
+Without Docker, data is stored in `./apartments.db` and `./bookings.db`. Override them with the `APARTMENTS_DB` and `BOOKINGS_DB` environment variables, or `--apartments-db PATH` and `--bookings-db PATH` for the CLI. To import an old `data.json`, run `python3 -m apartment_booking.migrate data.json`.
 
 `scripts/smoke_test.py` runs every workflow against a running server and cleans up afterwards: `python3 scripts/smoke_test.py http://localhost:8000`.
 
@@ -155,7 +161,7 @@ Like `e2e/`, the folder has no `__init__.py`, so the plain unit test run doesn't
 
 ## Browser tests (Playwright)
 
-`e2e/` holds end-to-end tests that drive the web UI in Chromium with [Playwright](https://playwright.dev/python/). They start the app on a free local port with fresh in-memory data for every test, so they never touch your `data.json`. They need Python 3.10+.
+`e2e/` holds end-to-end tests that drive the web UI in Chromium with [Playwright](https://playwright.dev/python/). They start the app on a free local port with fresh in-memory data for every test, so they never touch your databases. They need Python 3.10+.
 
 ```sh
 pip install -r requirements-e2e.txt
@@ -172,7 +178,10 @@ HEADED=1 python -m unittest discover -s e2e  # watch them in a browser window
 ```
 apartment_booking/
   service.py      business rules (shared by web app and CLI)
-  storage.py      JSON file storage
+  repos.py        SQLite repositories for apartments and bookings
+  db.py           SQLite connections and transactions
+  errors.py       errors shown to the user
+  migrate.py      one-off import of the old data.json
   api.py          REST API under /api
   openapi.yaml    API specification
   web.py          Flask app factory and HTML pages
@@ -185,7 +194,7 @@ e2e/              browser tests (Playwright, Chromium)
 scripts/          end-to-end smoke test
 ```
 
-The server runs as a single gunicorn worker with four threads. Requests are serialized with a lock so concurrent writes to the JSON file can't overwrite each other. Don't increase the worker count without moving to a real database.
+Apartments and bookings are kept in separate SQLite databases, as a first step towards separate services. Each write runs in its own transaction, and booking writes take the database's write lock before checking for overlaps, so two requests can never double-book an apartment. That makes it safe to run several gunicorn workers (the Docker image uses two, with four threads each).
 
 A plan to split apartments into their own microservice (SQLite per service, HTTP plus RabbitMQ events) is described, with architecture diagrams, in [documentation/microservices-plan.md](documentation/microservices-plan.md).
 

@@ -5,15 +5,15 @@ from contextlib import redirect_stderr, redirect_stdout
 from io import StringIO
 
 from apartment_booking.cli import main
-from apartment_booking.service import (BookingError, BookingService,
-                                       ConflictError, NotFoundError,
-                                       OverlapError)
-from apartment_booking.storage import JsonStorage, MemoryStorage
+from apartment_booking.repos import BookingRepo
+from apartment_booking.service import (BookingError, ConflictError,
+                                       NotFoundError, OverlapError,
+                                       open_service)
 
 
 class ApartmentTests(unittest.TestCase):
     def setUp(self):
-        self.svc = BookingService(MemoryStorage())
+        self.svc = open_service()
 
     def test_add_view_list(self):
         a = self.svc.add_apartment("Loft", "1 Main St", rooms=2, price=80)
@@ -34,6 +34,16 @@ class ApartmentTests(unittest.TestCase):
             self.svc.add_apartment("A", "x", rooms=0)
         with self.assertRaises(BookingError):
             self.svc.add_apartment("A", "x", price=-1)
+
+    def test_update_validation(self):
+        self.svc.add_apartment("Loft", "1 Main St")
+        for changes in ({"name": " "}, {"rooms": 0}, {"price": -1}):
+            with self.subTest(changes=changes), self.assertRaises(BookingError):
+                self.svc.update_apartment(1, **changes)
+        with self.assertRaises(NotFoundError):
+            self.svc.update_apartment(9, name="x")
+        a = self.svc.update_apartment(1, name=" Big Loft ", address="2 Main St")
+        self.assertEqual((a["name"], a["address"]), ("Big Loft", "2 Main St"))
 
     def test_remove(self):
         self.svc.add_apartment("Loft", "x")
@@ -57,7 +67,7 @@ class ApartmentTests(unittest.TestCase):
 
 class BookingTests(unittest.TestCase):
     def setUp(self):
-        self.svc = BookingService(MemoryStorage())
+        self.svc = open_service()
         self.svc.add_apartment("Loft", "x")
         self.svc.add_apartment("Studio", "y")
 
@@ -142,7 +152,7 @@ class ConflictTests(unittest.TestCase):
     """Rule violations that depend on existing data are ConflictErrors (HTTP 409)."""
 
     def setUp(self):
-        self.svc = BookingService(MemoryStorage())
+        self.svc = open_service()
         self.svc.add_apartment("Loft", "1 Main St")
         self.svc.create_booking(1, "Ann", "2026-11-01", "2026-11-05")
 
@@ -169,7 +179,7 @@ class ConflictTests(unittest.TestCase):
 
 class SearchTests(unittest.TestCase):
     def setUp(self):
-        self.svc = BookingService(MemoryStorage())
+        self.svc = open_service()
         self.svc.add_apartment("Loft", "x", rooms=1)
         self.svc.add_apartment("Studio", "y", rooms=3)
         self.svc.create_booking(1, "Ann", "2026-11-01", "2026-11-05")
@@ -195,7 +205,8 @@ class SearchTests(unittest.TestCase):
 class CliTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
-        self.data = os.path.join(self.tmp.name, "data.json")
+        self.apartments_db = os.path.join(self.tmp.name, "apartments.db")
+        self.bookings_db = os.path.join(self.tmp.name, "bookings.db")
 
     def tearDown(self):
         self.tmp.cleanup()
@@ -203,7 +214,7 @@ class CliTests(unittest.TestCase):
     def cli(self, *argv):
         out, err = StringIO(), StringIO()
         with redirect_stdout(out), redirect_stderr(err):
-            code = main([*argv, "--data", self.data])
+            code = main([*argv, "--apartments-db", self.apartments_db, "--bookings-db", self.bookings_db])
         return code, out.getvalue(), err.getvalue()
 
     def test_end_to_end_persists(self):
@@ -221,7 +232,8 @@ class CliTests(unittest.TestCase):
         _, out, _ = self.cli("booking", "change", "1", "--to", "2026-11-07", "--json")
         self.assertIn('"check_out": "2026-11-07"', out)
         # Data really lives on disk.
-        self.assertEqual(len(JsonStorage(self.data).load()["bookings"]), 1)
+        with BookingRepo(self.bookings_db).reading() as table:
+            self.assertEqual(len(table.list(include_cancelled=True)), 1)
 
 
     def test_help_lists_commands(self):

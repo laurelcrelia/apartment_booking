@@ -5,7 +5,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
-    APT_DATA_FILE=/data/data.json
+    APARTMENTS_DB=/data/apartments.db \
+    BOOKINGS_DB=/data/bookings.db
 
 WORKDIR /app
 
@@ -33,6 +34,6 @@ FROM base AS runtime
 USER app
 VOLUME ["/data"]
 EXPOSE 8000
-# One worker: the JSON data file is guarded by an in-process lock (see web.py).
-CMD ["gunicorn", "--bind", "0.0.0.0:8000", "--workers", "1", "--threads", "4", \
+# Several workers are safe: every write runs in its own SQLite transaction.
+CMD ["gunicorn", "--bind", "0.0.0.0:8000", "--workers", "2", "--threads", "4", \
      "--access-logfile", "-", "apartment_booking.web:create_app()"]

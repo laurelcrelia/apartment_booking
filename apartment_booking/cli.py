@@ -6,8 +6,7 @@ import json
 import os
 import sys
 
-from .service import BookingError, BookingService
-from .storage import JsonStorage
+from .service import BookingError, BookingService, open_service
 
 PROG = "booking.py"
 
@@ -26,8 +25,9 @@ booking create --apartment ID --from DATE --to DATE [--guest NAME]
 booking change ID [--from DATE] [--to DATE] [--apartment ID] [--guest NAME]
 booking cancel ID
 Options (any command):
---json         print results as JSON
---data PATH    data file (default: $APT_DATA_FILE or ./data.json)
+--json                print results as JSON
+--apartments-db PATH  apartments database (default: $APARTMENTS_DB or ./apartments.db)
+--bookings-db PATH    bookings database (default: $BOOKINGS_DB or ./bookings.db)
 Dates are YYYY-MM-DD; --to is the check-out day (exclusive).
 """
 
@@ -43,7 +43,8 @@ class _HelpAction(argparse.Action):
 
 def build_parser() -> argparse.ArgumentParser:
     common = argparse.ArgumentParser(add_help=False)
-    common.add_argument("--data", default=os.environ.get("APT_DATA_FILE", "data.json"))
+    common.add_argument("--apartments-db", default=os.environ.get("APARTMENTS_DB", "apartments.db"))
+    common.add_argument("--bookings-db", default=os.environ.get("BOOKINGS_DB", "bookings.db"))
     common.add_argument("--json", action="store_true")
 
     p = argparse.ArgumentParser(prog=PROG, add_help=False)
@@ -150,7 +151,7 @@ def main(argv=None) -> int:
         print(HELP, end="")
         return 0
     args = build_parser().parse_args(argv)
-    svc = BookingService(JsonStorage(args.data))
+    svc = open_service(args.apartments_db, args.bookings_db)
     try:
         message, result = run(args, svc)
     except BookingError as e:

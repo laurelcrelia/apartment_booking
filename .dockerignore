@@ -5,6 +5,9 @@
 **/*.pyc
 *.tmp
 data.json
+*.db
+*.db-wal
+*.db-shm
 documentation/
 Dockerfile
 .dockerignore
