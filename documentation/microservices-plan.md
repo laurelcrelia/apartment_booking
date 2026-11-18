@@ -51,20 +51,20 @@ flowchart LR
         BookSvc[BookingService]
     end
 
-    BookSvc -- "HTTP: apartment CRUD,<br/>fresh reads, read-through" --> AptAPI
+    BookSvc -->|"HTTP: apartment CRUD,<br/>fresh reads, read-through"| AptAPI
     BookSvc --> BookDB[("bookings.db<br/>bookings<br/>apartments_replica<br/>processed_events")]
 
     subgraph Apts["apartments (apartments_service), internal only"]
         AptAPI["/api/apartments"] --> AptSvc[ApartmentService]
     end
-    AptSvc -- "change + event<br/>in one transaction" --> AptDB[("apartments.db<br/>apartments<br/>outbox")]
+    AptSvc -->|"change + event<br/>in one transaction"| AptDB[("apartments.db<br/>apartments<br/>outbox")]
 
-    Relay["apartments-relay"] -- "poll unpublished" --> AptDB
-    Relay -- "publish (confirms)" --> MQ{{"RabbitMQ<br/>exchange: apartments (topic)"}}
-    MQ -- "queue: bookings.apartments<br/>binding: apartment.*" --> Consumer["booking-consumer"]
-    Consumer -- "upsert / delete<br/>idempotent, versioned" --> BookDB
+    Relay["apartments-relay"] -->|"poll unpublished"| AptDB
+    Relay -->|"publish (confirms)"| MQ{{"RabbitMQ<br/>exchange: apartments (topic)"}}
+    MQ -->|"queue: bookings.apartments<br/>binding: apartment.*"| Consumer["booking-consumer"]
+    Consumer -->|"upsert / delete<br/>idempotent, versioned"| BookDB
 
-    Future["future services<br/>(payments, notifications…)"] -. "own queue" .-> MQ
+    Future["future services<br/>(payments, notifications…)"] -.->|"own queue"| MQ
 ```
 
 Containers in `compose.yaml`: `web`, `booking-consumer`, `apartments`, `apartments-relay`, `rabbitmq`, plus the `booking` CLI profile. They all use the same image with different commands. There are two volumes, `booking-data` and `apartments-data`.
@@ -85,7 +85,7 @@ sequenceDiagram
 
     C->>W: POST /api/apartments
     W->>A: POST /api/apartments
-    A->>ADB: BEGIN; INSERT apartment; INSERT outbox(apartment.created); COMMIT
+    A->>ADB: one transaction: INSERT apartment + INSERT outbox row (apartment.created)
     A-->>W: 201 {id, ...}
     W-->>C: 201 Location: /api/apartments/{id}
     loop every ~0.5 s
@@ -95,7 +95,7 @@ sequenceDiagram
         R->>ADB: UPDATE outbox SET published_at
     end
     MQ->>BC: deliver apartment.created
-    BC->>BDB: BEGIN; skip if event_id seen; upsert replica if version newer; record event_id; COMMIT
+    BC->>BDB: one transaction: skip if event_id seen → upsert replica if version newer → record event_id
     BC-->>MQ: ack
 ```
 
@@ -118,7 +118,7 @@ sequenceDiagram
         W->>A: GET /api/apartments/{id}
         A-->>W: 200 (upsert into replica) or 404
     end
-    W->>BDB: BEGIN IMMEDIATE; check overlap; INSERT booking; COMMIT
+    W->>BDB: BEGIN IMMEDIATE → check overlap → INSERT booking → COMMIT
     W-->>C: 201 or 404 / 409
 
     Note over C,A: Delete apartment (check, then delete)
