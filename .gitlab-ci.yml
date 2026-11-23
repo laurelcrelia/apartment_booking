@@ -103,7 +103,8 @@ compose-e2e:
     - docker compose start apartments
     - docker compose up -d --wait
     # Only the gateway is published; JSON 503 while the web app is down, and back afterwards.
-    - test -z "$(docker compose port web 8000 2>/dev/null)"
+    # Compose prints ":0" for a port that isn't published, "host:port" otherwise.
+    - if (docker compose port web 8000 2>/dev/null || true) | grep -q ':[1-9]'; then echo "web must not be published"; exit 1; fi
     - docker compose stop web
     - test "$(curl -s -o body.json -w '%{http_code}' http://localhost:$APP_PORT/api/apartments)" = 503
     - grep -q '"service_unavailable"' body.json
