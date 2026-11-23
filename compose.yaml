@@ -82,14 +82,32 @@ services:
       retries: 3
       start_period: 30s
 
+  # Gateway: the only way in from outside. Passes requests to `web` for now.
+  nginx:
+    image: nginx:1.27-alpine
+    ports:
+      - "127.0.0.1:${APP_PORT:-8000}:8000"
+    volumes:
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      web:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:  # healthy while it serves the app
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8000/api/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+
   # Web UI, public REST API and bookings; calls the apartments service over HTTP.
+  # Internal only: reached through nginx.
   web:
     build: .
     image: apartment-booking
-    ports:
-      - "127.0.0.1:${APP_PORT:-8000}:8000"
     environment:
       APARTMENTS_URL: http://apartments:8000
+      TRUSTED_PROXIES: "1"  # nginx: trust one X-Forwarded-For hop
     volumes:
       - booking-data:/data
     depends_on:

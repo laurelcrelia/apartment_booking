@@ -1,6 +1,6 @@
 # Plan: NGINX gateway, static frontend and two equal services
 
-Status: **planned**. Follows [microservices-plan.md](microservices-plan.md), which split apartments into their own service.
+Status: **in progress**: step 1 done. Follows [microservices-plan.md](microservices-plan.md), which split apartments into their own service.
 
 ## Why
 
@@ -155,7 +155,7 @@ Bookings get a `version` column, bumped on every change, like apartments have.
 The HTTP API tests (`api_tests/`) must pass **unchanged** after every step: in CI against the Compose stack through NGINX, and locally against a small Python router that mimics the NGINX routes.
 
 0. **This document.**
-1. **NGINX in front of today's app,** with no behaviour change:
+1. **NGINX in front of today's app,** with no behaviour change (done):
    - an `nginx` container, which becomes the only published port; `web` is unpublished
    - `ProxyFix`, so Flask sees the real client address
    - JSON `404` and `503` error responses
