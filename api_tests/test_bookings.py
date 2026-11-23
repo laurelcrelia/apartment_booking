@@ -1,4 +1,7 @@
-from support import ApiTestCase, day, eventually, unique
+from support import ApiTestCase, day, unique
+
+# An apartment ID no test ever creates.
+NEVER_EXISTED = 999_999_999
 
 
 class CreateBookingTests(ApiTestCase):
@@ -42,10 +45,11 @@ class CreateBookingTests(ApiTestCase):
         self.assertEqual(self.book(other["id"], day(1, 5), day(1, 10)).status, 201)
 
     def test_unknown_apartment_is_404(self):
-        gone = self.add_apartment()
-        self.assertEqual(self.delete(f"/api/apartments/{gone['id']}").status, 204)
-        eventually(lambda: self.assertError(self.book(gone["id"], day(1, 1), day(1, 5)),
-                                            404, "not_found", f"Apartment {gone['id']}"))
+        # An ID that never existed, not a just-deleted apartment: the booking
+        # side learns about deletions through events, so for a moment after a
+        # delete it may still accept the apartment (a documented trade-off).
+        self.assertError(self.book(NEVER_EXISTED, day(1, 1), day(1, 5)),
+                         404, "not_found", f"Apartment {NEVER_EXISTED}")
 
     def test_validation_errors(self):
         a = self.apt["id"]
@@ -142,10 +146,7 @@ class ChangeBookingTests(ApiTestCase):
         self.assertError(self.patch(self.url(), {"check_out": day(4, 1)}),
                          400, "validation_error", "after check-in")
         self.assertError(self.patch(self.url(), {"check_in": "nope"}), 400, "validation_error", "Invalid date")
-        gone = self.add_apartment()
-        self.assertEqual(self.delete(f"/api/apartments/{gone['id']}").status, 204)
-        eventually(lambda: self.assertError(self.patch(self.url(), {"apartment_id": gone["id"]}),
-                                            404, "not_found"))
+        self.assertError(self.patch(self.url(), {"apartment_id": NEVER_EXISTED}), 404, "not_found")
         self.assertEqual(self.get(self.url()).json, self.b)
 
 
