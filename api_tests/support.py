@@ -16,7 +16,6 @@ import atexit
 import json
 import os
 import tempfile
-import threading
 import time
 import unittest
 import urllib.error
@@ -31,70 +30,20 @@ _base_url: str | None = None
 
 
 def start_local_server() -> str:
-    """Start the apartments service and the booking web app on free ports,
-    calling each other over HTTP like the deployed services, a stand-in for
-    the NGINX gateway in front of them, and a thread that delivers events
-    between them a little later, in both directions, as RabbitMQ would;
-    returns the gateway's URL."""
-    from werkzeug.serving import WSGIRequestHandler, make_server
-
-    from functools import partial
-
-    from apartment_booking.consumer import handle_event
-    from apartment_booking.inprocess import LocalPublisher
-    from apartment_booking.local import LocalGateway
-    from apartment_booking.repos import BookingRepo
-    from apartment_booking.service import open_service
-    from apartment_booking.web import create_app
-    from apartments_service.app import create_app as create_apartments_app
-    from apartments_service.bookings_client import HttpBookings
-    from apartments_service.consumer import handle_booking_event
-    from apartments_service.repo import ApartmentRepo
-    from apartments_service.service import ApartmentService
-    from common.relay import Relay
-
-    class QuietHandler(WSGIRequestHandler):
-        def log_request(self, *args):
-            pass
-
-    def serve(app):
-        server = make_server("127.0.0.1", 0, app, threaded=True, request_handler=QuietHandler)
-        threading.Thread(target=server.serve_forever, daemon=True).start()
-        servers.append(server)
-        return f"http://127.0.0.1:{server.server_port}"
+    """Start the whole app locally (devstack): both services on their own ports,
+    calling each other over HTTP, behind a stand-in for the NGINX gateway, with
+    events delivered a little later, as RabbitMQ would; returns its URL."""
+    import devstack
 
     tmp = tempfile.TemporaryDirectory()
-    servers = []
-    apartments_repo = ApartmentRepo(os.path.join(tmp.name, "apartments.db"))
-    bookings_db = os.path.join(tmp.name, "bookings.db")
-    web = {}  # the web app needs the apartments URL, and the other way round
-    web_url = serve(lambda environ, start: web["app"](environ, start))
-    apartments_app = create_apartments_app(ApartmentService(apartments_repo, HttpBookings(web_url)))
-    apartments_url = serve(apartments_app)
-    web["app"] = create_app(open_service(bookings_db=bookings_db, apartments_url=apartments_url))
-    # The public entry point: routes by path like NGINX does.
-    gateway_url = serve(LocalGateway(web["app"], apartments_app))
-
-    bookings_repo = BookingRepo(bookings_db)
-    relays = [Relay(apartments_repo.outbox, LocalPublisher(partial(handle_event, bookings_repo))),
-              Relay(bookings_repo.outbox, LocalPublisher(partial(handle_booking_event, apartments_repo)))]
-    stopping = threading.Event()
-
-    def deliver_events():
-        while not stopping.wait(0.2):
-            for relay in relays:
-                relay.publish_pending()
-    relay_thread = threading.Thread(target=deliver_events, daemon=True)
-    relay_thread.start()
+    stack = devstack.start(os.path.join(tmp.name, "apartments.db"), os.path.join(tmp.name, "bookings.db"),
+                           sync_events=False)
 
     def stop():
-        stopping.set()
-        relay_thread.join()
-        for server in servers:
-            server.shutdown()
+        stack.stop()
         tmp.cleanup()
     atexit.register(stop)
-    return gateway_url
+    return stack.url
 
 
 def base_url() -> str:

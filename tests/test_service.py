@@ -4,16 +4,15 @@ import unittest
 from contextlib import redirect_stderr, redirect_stdout
 from io import StringIO
 
-from apartment_booking.cli import main
-from apartment_booking.repos import BookingRepo
-from apartment_booking.service import (BookingError, ConflictError,
-                                       NotFoundError, OverlapError,
-                                       open_service)
+import devstack
+from booking_cli.cli import main
+from common.errors import BookingError, ConflictError, NotFoundError, OverlapError
+from tests.helpers import Services
 
 
 class ApartmentTests(unittest.TestCase):
     def setUp(self):
-        self.svc = open_service()
+        self.svc = Services()
 
     def test_add_view_list(self):
         a = self.svc.add_apartment("Loft", "1 Main St", rooms=2, price=80)
@@ -67,7 +66,7 @@ class ApartmentTests(unittest.TestCase):
 
 class BookingTests(unittest.TestCase):
     def setUp(self):
-        self.svc = open_service()
+        self.svc = Services()
         self.svc.add_apartment("Loft", "x")
         self.svc.add_apartment("Studio", "y")
 
@@ -152,7 +151,7 @@ class ConflictTests(unittest.TestCase):
     """Rule violations that depend on existing data are ConflictErrors (HTTP 409)."""
 
     def setUp(self):
-        self.svc = open_service()
+        self.svc = Services()
         self.svc.add_apartment("Loft", "1 Main St")
         self.svc.create_booking(1, "Ann", "2026-11-01", "2026-11-05")
 
@@ -179,7 +178,7 @@ class ConflictTests(unittest.TestCase):
 
 class SearchTests(unittest.TestCase):
     def setUp(self):
-        self.svc = open_service()
+        self.svc = Services()
         self.svc.add_apartment("Loft", "x", rooms=1)
         self.svc.add_apartment("Studio", "y", rooms=3)
         self.svc.create_booking(1, "Ann", "2026-11-01", "2026-11-05")
@@ -203,18 +202,19 @@ class SearchTests(unittest.TestCase):
 
 
 class CliTests(unittest.TestCase):
+    """The CLI against the running app (devstack), through the public API."""
+
     def setUp(self):
-        self.tmp = tempfile.TemporaryDirectory()
-        self.apartments_db = os.path.join(self.tmp.name, "apartments.db")
-        self.bookings_db = os.path.join(self.tmp.name, "bookings.db")
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.dbs = os.path.join(tmp.name, "apartments.db"), os.path.join(tmp.name, "bookings.db")
+        self.stack = devstack.start(*self.dbs)
+        self.addCleanup(self.stack.stop)
 
-    def tearDown(self):
-        self.tmp.cleanup()
-
-    def cli(self, *argv):
+    def cli(self, *argv, api=None):
         out, err = StringIO(), StringIO()
         with redirect_stdout(out), redirect_stderr(err):
-            code = main([*argv, "--apartments-db", self.apartments_db, "--bookings-db", self.bookings_db])
+            code = main([*argv, "--api", api or self.stack.url])
         return code, out.getvalue(), err.getvalue()
 
     def test_end_to_end_persists(self):
@@ -231,16 +231,41 @@ class CliTests(unittest.TestCase):
         self.assertIn("No apartments available", out)
         _, out, _ = self.cli("booking", "change", "1", "--to", "2026-11-07", "--json")
         self.assertIn('"check_out": "2026-11-07"', out)
-        # Data really lives on disk.
-        with BookingRepo(self.bookings_db).reading() as table:
-            self.assertEqual(len(table.list(include_cancelled=True)), 1)
+        # The data really lives in the app's databases.
+        self.stack.stop()
+        restarted = devstack.start(*self.dbs)
+        self.addCleanup(restarted.stop)
+        self.assertEqual(restarted.call("GET", "/api/bookings/1")["check_out"], "2026-11-07")
 
+    def test_every_command(self):
+        self.cli("apartment", "add", "--name", "Loft", "--address", "x", "--price", "80")
+        self.assertIn("[1] Loft | x | rooms: 1 | 80.00/night", self.cli("apartment", "list")[1])
+        self.assertIn("Loft", self.cli("apartment", "view", "1")[1])
+        self.assertIn("rooms: 3", self.cli("apartment", "update", "1", "--rooms", "3")[1])
+        self.cli("booking", "create", "--apartment", "1", "--from", "2026-11-01", "--to", "2026-11-05")
+        self.assertIn("[1] apartment 1 | - | 2026-11-01 -> 2026-11-05 | active",
+                      self.cli("booking", "list", "--apartment", "1")[1])
+        self.assertIn("active", self.cli("booking", "view", "1")[1])
+        code, _, err = self.cli("apartment", "remove", "1")
+        self.assertEqual(code, 1)
+        self.assertIn("active bookings", err)
+        self.assertIn("Cancelled booking", self.cli("booking", "cancel", "1")[1])
+        self.assertIn("No bookings", self.cli("booking", "list")[1])
+        self.assertIn("cancelled", self.cli("booking", "list", "--all", "--guest", "")[1])
+        self.assertIn("Removed apartment: [1] Loft", self.cli("apartment", "remove", "1")[1])
+        self.assertIn("No apartments", self.cli("apartment", "list")[1])
+
+    def test_unreachable_app(self):
+        code, _, err = self.cli("apartment", "list", api="http://127.0.0.1:9")
+        self.assertEqual(code, 1)
+        self.assertIn("Can't reach the app at http://127.0.0.1:9", err)
 
     def test_help_lists_commands(self):
         code, out, _ = self.cli("--help")
         self.assertEqual(code, 0)
         self.assertIn("booking create --apartment ID --from DATE --to DATE", out)
         self.assertIn("apartment search --from DATE --to DATE", out)
+        self.assertIn("--api URL", out)
 
 
 if __name__ == "__main__":

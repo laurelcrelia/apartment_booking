@@ -9,15 +9,15 @@ import unittest
 from contextlib import closing
 from functools import partial
 
-from apartment_booking.inprocess import LocalPublisher
-from apartment_booking.migrate import migrate
-from apartment_booking.repos import BookingRepo
-from apartment_booking.service import open_service
+from bookings_service.migrate import migrate
+from bookings_service.repos import BookingRepo
 from apartments_service.consumer import handle_booking_event, on_message
 from apartments_service.repo import ApartmentRepo
 from common.events import BOOKING_CANCELLED, BOOKING_CHANGED, BOOKING_CREATED, encode, new_event
 from common.relay import Relay
 from common.worker import run_tasks
+from devstack import LocalPublisher
+from tests.helpers import Services
 
 
 def booking_event(event_type, booking_id=1, version=1, **fields):
@@ -134,12 +134,12 @@ class ApartmentsConsumerTests(unittest.TestCase):
         self.assertIn("no check_out", logs.output[2])
 
 
-class InProcessBothWaysTests(unittest.TestCase):
+class BothWaysTests(unittest.TestCase):
     def test_booking_changes_reach_the_apartments_side_right_away(self):
-        svc = open_service()
+        svc = Services()
         svc.add_apartment("Loft", "x")
         b = svc.create_booking(1, "Ann", "2026-11-01", "2026-11-05")
-        replica = svc.apartments.service.repo.bookings
+        replica = svc.apartments_repo.bookings
         self.assertEqual([(r["id"], r["status"]) for r in replica.list()], [(b["id"], "active")])
         svc.change_booking(b["id"], check_out="2026-11-07")
         self.assertEqual(replica.list()[0]["check_out"], "2026-11-07")
@@ -156,13 +156,13 @@ class InProcessBothWaysTests(unittest.TestCase):
                                               "check_out": "2026-11-05", "status": "active"}}}, f)
             dbs = os.path.join(tmp, "apartments.db"), os.path.join(tmp, "bookings.db")
             migrate(data, *dbs)
-            svc = open_service(*dbs)
-            self.assertEqual([r["id"] for r in svc.apartments.service.repo.bookings.list()], [1])
+            svc = Services(*dbs)
+            self.assertEqual([r["id"] for r in svc.apartments_repo.bookings.list()], [1])
 
 
 class WorkerModuleTests(unittest.TestCase):
     def test_workers_import_and_use_distinct_heartbeats(self):
-        import apartment_booking.worker as bookings_worker
+        import bookings_service.worker as bookings_worker
         import apartments_service.worker as apartments_worker
         files = [apartments_worker.RELAY_HEARTBEAT, apartments_worker.CONSUMER_HEARTBEAT,
                  bookings_worker.RELAY_HEARTBEAT, bookings_worker.CONSUMER_HEARTBEAT]

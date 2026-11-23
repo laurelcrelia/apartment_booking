@@ -20,20 +20,22 @@ RUN pip install -r requirements.txt
 COPY booking.py ./
 COPY common/ ./common/
 COPY apartments_service/ ./apartments_service/
-COPY apartment_booking/ ./apartment_booking/
+COPY bookings_service/ ./bookings_service/
+COPY booking_cli/ ./booking_cli/
 
 # Test image: adds dev dependencies and the tests. Build with --target test.
 FROM base AS test
 COPY requirements-dev.txt ./
 RUN pip install -r requirements-dev.txt
 COPY tests/ ./tests/
-# Some tests check the static frontend that the gateway serves.
+# Tests run the whole app with devstack, including the static frontend.
+COPY devstack/ ./devstack/
 COPY frontend/ ./frontend/
 USER app
 ENTRYPOINT ["python", "-m", "unittest"]
 CMD ["-v"]
 
-# Runtime image (default): serves the web app on port 8000. The same image runs
+# Runtime image (default): serves the booking service on port 8000. The same image runs
 # the apartments service with a different command (see compose.yaml).
 FROM base AS runtime
 USER app
@@ -41,4 +43,4 @@ VOLUME ["/data"]
 EXPOSE 8000
 # Several workers are safe: every write runs in its own SQLite transaction.
 CMD ["gunicorn", "--bind", "0.0.0.0:8000", "--workers", "2", "--threads", "4", \
-     "--access-logfile", "-", "apartment_booking.web:create_app()"]
+     "--access-logfile", "-", "bookings_service.app:create_app()"]

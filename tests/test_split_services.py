@@ -1,29 +1,25 @@
 """The two services talking to each other over HTTP, as deployed."""
-import os
-import tempfile
 import threading
 import unittest
-from contextlib import redirect_stderr, redirect_stdout
 from functools import partial
-from io import StringIO
 
 from flask import Flask
 from werkzeug.serving import WSGIRequestHandler, make_server
 from werkzeug.test import Client
 
-from apartment_booking.apartments_client import HttpApartments
-from apartment_booking.cli import main
-from apartment_booking.inprocess import LocalPublisher
-from apartment_booking.local import LocalGateway
-from apartment_booking.service import open_service
-from apartment_booking.web import create_app
+from bookings_service.apartments_client import HttpApartments
+from bookings_service.service import open_service
+from bookings_service.app import create_app
 from apartments_service.app import create_app as create_apartments_app
 from apartments_service.bookings_client import HttpBookings
 from apartments_service.consumer import handle_booking_event
 from apartments_service.repo import ApartmentRepo
 from apartments_service.service import ApartmentService
 from common.errors import BookingError, ConflictError, NotFoundError, ServiceUnavailableError
+from common.client import ServiceClient
 from common.relay import Relay
+from devstack import LocalPublisher
+from devstack.gateway import Gateway
 
 
 class QuietHandler(WSGIRequestHandler):
@@ -58,9 +54,9 @@ class SplitTestCase(unittest.TestCase):
         self.apartments_repo = ApartmentRepo(":memory:")
         apartments_app = create_apartments_app(ApartmentService(self.apartments_repo, HttpBookings(self.web_url)))
         self.apartments_url = serve(self, apartments_app)
-        self.service = open_service(apartments_url=self.apartments_url)
+        self.service = open_service(":memory:", self.apartments_url)
         web["app"] = create_app(self.service)
-        self.client = Client(LocalGateway(web["app"], apartments_app))
+        self.client = Client(Gateway(web["app"], apartments_app))
 
     def deliver_booking_events(self):
         """What the booking worker does through RabbitMQ in Docker."""
@@ -69,30 +65,21 @@ class SplitTestCase(unittest.TestCase):
 
 
 class HttpApartmentsTests(SplitTestCase):
-    def setUp(self):
-        super().setUp()
-        self.apartments = HttpApartments(self.apartments_url + "/")
-
-    def test_crud(self):
-        a = self.apartments.add("Loft", "1 Beach Rd", rooms=2, price=80)
-        self.assertEqual(a, {"id": 1, "name": "Loft", "address": "1 Beach Rd", "rooms": 2, "price": 80.0})
-        self.assertEqual(self.apartments.get(1), a)
-        self.assertEqual(self.apartments.list(), [a])
-        self.assertEqual(self.apartments.update(1, price=95.5)["price"], 95.5)
-        self.assertEqual(self.apartments.update(1)["price"], 95.5)
-        self.assertIsNone(self.apartments.delete(1))
-        self.assertEqual(self.apartments.list(), [])
+    def test_get(self):
+        self.client.post("/api/apartments", json={"name": "Loft", "address": "1 Beach Rd", "rooms": 2, "price": 80})
+        self.assertEqual(HttpApartments(self.apartments_url + "/").get(1),
+                         {"id": 1, "name": "Loft", "address": "1 Beach Rd", "rooms": 2, "price": 80.0})
 
     def test_errors_keep_their_type_and_message(self):
         with self.assertRaisesRegex(NotFoundError, "Apartment 9 not found"):
-            self.apartments.get(9)
+            HttpApartments(self.apartments_url).get(9)
         with self.assertRaisesRegex(BookingError, "name is required") as ctx:
-            self.apartments.add(" ", "x")
+            ServiceClient(self.apartments_url).call("POST", "/api/apartments", {"name": " ", "address": "x"})
         self.assertNotIsInstance(ctx.exception, (NotFoundError, ConflictError, ServiceUnavailableError))
 
     def test_unreachable_service(self):
-        with self.assertRaisesRegex(ServiceUnavailableError, "unavailable"):
-            HttpApartments(closed_port_url()).list()
+        with self.assertRaisesRegex(ServiceUnavailableError, "apartments service is unavailable"):
+            HttpApartments(closed_port_url()).get(1)
 
     def test_server_errors_and_bad_responses_mean_unavailable(self):
         broken = Flask(__name__)
@@ -102,13 +89,13 @@ class HttpApartmentsTests(SplitTestCase):
         broken.delete("/api/apartments/<int:i>", endpoint="e3")(lambda i: ("<html>teapot</html>", 418))
         client = HttpApartments(serve(self, broken))
         with self.assertRaises(ServiceUnavailableError):
-            client.list()
+            client.call("GET", "/api/apartments")
         with self.assertRaises(ServiceUnavailableError):
             client.get(1)
         with self.assertRaisesRegex(ConflictError, "Taken"):
-            client.add("Loft", "x")
+            client.call("POST", "/api/apartments", {})
         with self.assertRaisesRegex(BookingError, "HTTP 418"):
-            client.delete(1)
+            client.call("DELETE", "/api/apartments/1")
 
 
 class GatewayTests(SplitTestCase):
@@ -148,7 +135,7 @@ class ApartmentsDownTests(unittest.TestCase):
     (/api/apartments itself then gets its 503 from the gateway.)"""
 
     def setUp(self):
-        self.client = create_app(open_service(apartments_url=closed_port_url())).test_client()
+        self.client = create_app(open_service(":memory:", closed_port_url())).test_client()
 
     def test_booking_an_unknown_apartment_answers_503(self):
         r = self.client.post("/api/bookings", json={"apartment_id": 1, "check_in": "2026-11-01",
@@ -178,22 +165,6 @@ class BookingsDownTests(unittest.TestCase):
     def test_reads_and_search_keep_working(self):
         self.assertEqual(len(self.client.get("/api/apartments").json), 1)
         self.assertEqual(len(self.client.get("/api/apartments?from=2026-11-01&to=2026-11-02").json), 1)
-
-
-class CliTests(SplitTestCase):
-    def test_cli_uses_apartments_service(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            out, err = StringIO(), StringIO()
-            with redirect_stdout(out), redirect_stderr(err):
-                main(["apartment", "add", "--name", "Loft", "--address", "x",
-                      "--apartments-url", self.apartments_url,
-                      "--bookings-db", os.path.join(tmp, "bookings.db")])
-                code = main(["apartment", "remove", "1", "--apartments-url", self.apartments_url,
-                             "--bookings-db", os.path.join(tmp, "bookings.db")])
-            self.assertEqual(code, 0, err.getvalue())
-            self.assertIn("Removed apartment: [1] Loft", out.getvalue())
-            # No local apartments database was used.
-            self.assertFalse(os.path.exists(os.path.join(tmp, "apartments.db")))
 
 
 if __name__ == "__main__":

@@ -1,6 +1,6 @@
 # Plan: NGINX gateway, static frontend and two equal services
 
-Status: **in progress**: steps 1–4 done. Follows [microservices-plan.md](microservices-plan.md), which split apartments into their own service.
+Status: **done**: all steps implemented, one pull request per step (#3 to #7). Follows [microservices-plan.md](microservices-plan.md), which split apartments into their own service.
 
 ## Why
 
@@ -171,11 +171,13 @@ The HTTP API tests (`api_tests/`) must pass **unchanged** after every step: in C
    - rewrite the 4 pages and the API docs page as static files served by NGINX
    - remove the Flask templates and page routes
    - rework the Playwright tests
-5. **Cleanup:**
+5. **Cleanup** (done):
    - rename `apartment_booking/` to `bookings_service/`
    - the CLI calls the API through the gateway
    - remove the in-process mode
    - update README, diagrams and both CI pipelines
+
+   Also done in this step: the Compose service `web` is now `bookings` (volumes unchanged, so data is kept); the CLI moved to its own package, `booking_cli/`; and `devstack/` replaces the in-process mode for development and tests, running both services as separate HTTP servers with the same code as Docker, minus NGINX and RabbitMQ.
 
 ## Verification (each step)
 

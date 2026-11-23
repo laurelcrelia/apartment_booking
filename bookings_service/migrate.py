@@ -1,6 +1,6 @@
 """Copy data from the old JSON data file into the SQLite databases.
 
-    python -m apartment_booking.migrate data.json [--apartments-db PATH] [--bookings-db PATH]
+    python -m bookings_service.migrate data.json [--apartments-db PATH] [--bookings-db PATH]
 
 IDs are kept, so bookings still point at the right apartments, and new IDs
 continue where the JSON file left off. Refuses to write into databases that
@@ -63,7 +63,7 @@ def migrate(json_path: str, apartments_db: str, bookings_db: str) -> tuple[int, 
 
 
 def main(argv=None) -> int:
-    p = argparse.ArgumentParser(prog="python -m apartment_booking.migrate",
+    p = argparse.ArgumentParser(prog="python -m bookings_service.migrate",
                                 description="Copy a JSON data file into the SQLite databases.")
     p.add_argument("json_file")
     p.add_argument("--apartments-db", default=os.environ.get("APARTMENTS_DB", "apartments.db"))

@@ -14,32 +14,19 @@ from __future__ import annotations
 
 import os
 import re
-import threading
 import unittest
 
 from playwright.sync_api import Page, expect, sync_playwright
-from werkzeug.serving import WSGIRequestHandler, make_server
 
-from apartment_booking.service import open_service
-from apartment_booking.local import create_local_app
+import devstack
 
 HEADED = os.environ.get("HEADED") == "1"
 WEB_FONTS = re.compile(r"https://fonts\.(googleapis|gstatic)\.com/.*")
 
 
-class QuietHandler(WSGIRequestHandler):
-    def log_request(self, *args):
-        pass
-
-
 class BrowserTestCase(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        # Both services behind the stand-in gateway; each test gets fresh data.
-        cls.server = make_server("127.0.0.1", 0, lambda environ, start: cls.gateway(environ, start),
-                                 threaded=True, request_handler=QuietHandler)
-        cls.base_url = f"http://127.0.0.1:{cls.server.server_port}"
-        threading.Thread(target=cls.server.serve_forever, daemon=True).start()
         cls.playwright = sync_playwright().start()
         cls.browser = cls.playwright.chromium.launch(headless=not HEADED, slow_mo=250 if HEADED else 0)
 
@@ -47,11 +34,13 @@ class BrowserTestCase(unittest.TestCase):
     def tearDownClass(cls):
         cls.browser.close()
         cls.playwright.stop()
-        cls.server.shutdown()
 
     def setUp(self):
-        self.service = open_service()
-        type(self).gateway = create_local_app(self.service)
+        # The whole app (devstack) with fresh in-memory data for every test.
+        stack = devstack.start()
+        self.addCleanup(stack.stop)
+        self.api = stack.call
+        self.base_url = stack.url
         self.context = self.browser.new_context(base_url=self.base_url)
         self.context.route(WEB_FONTS, lambda route: route.abort())  # system fonts; no internet needed
         self.page: Page = self.context.new_page()
@@ -60,10 +49,14 @@ class BrowserTestCase(unittest.TestCase):
         self.context.close()
 
     def add_apartment(self, name="Canal Loft", address="Via Museo 1", rooms=3, price=240.0) -> dict:
-        return self.service.add_apartment(name, address, rooms, price)
+        return self.api("POST", "/api/apartments", {"name": name, "address": address, "rooms": rooms, "price": price})
 
     def add_booking(self, apt_id, check_in="2030-05-01", check_out="2030-05-05", guest="Sarah") -> dict:
-        return self.service.create_booking(apt_id, guest, check_in, check_out)
+        return self.api("POST", "/api/bookings",
+                        {"apartment_id": apt_id, "guest": guest, "check_in": check_in, "check_out": check_out})
+
+    def get_booking(self, booking_id) -> dict:
+        return self.api("GET", f"/api/bookings/{booking_id}")
 
     def expect_toast(self, message):
         expect(self.page.locator("#flash")).to_be_visible()
@@ -166,7 +159,7 @@ class ApartmentPagesTests(BrowserTestCase):
         form.get_by_role("button", name="Create booking").click()
 
         expect(form.locator(".form-error")).to_contain_text("already booked")
-        self.assertEqual(len(self.service.list_bookings()), 1)
+        self.assertEqual(len(self.api("GET", "/api/bookings")), 1)
 
     def test_edit_apartment(self):
         apt = self.add_apartment()
@@ -265,7 +258,7 @@ class BookingPagesTests(BrowserTestCase):
         expect(self.page.locator("tbody")).to_contain_text("Sarah Jenkins")
 
     def test_cancelled_bookings_are_hidden_unless_requested(self):
-        self.service.cancel_booking(self.booking["id"])
+        self.api("PATCH", f"/api/bookings/{self.booking['id']}", {"status": "cancelled"})
         self.page.goto("/bookings")
         expect(self.page.get_by_role("heading", name="No bookings.")).to_be_visible()
 
@@ -298,7 +291,7 @@ class BookingPagesTests(BrowserTestCase):
 
         self.expect_toast("Booking changed")
         expect(self.page.get_by_text("6 nights").first).to_be_visible()
-        changed = self.service.get_booking(self.booking["id"])
+        changed = self.get_booking(self.booking["id"])
         self.assertEqual((changed["apartment_id"], changed["check_out"]), (self.studio["id"], "2030-05-07"))
 
     def test_reset_restores_original_values(self):
@@ -317,7 +310,7 @@ class BookingPagesTests(BrowserTestCase):
         dialog.get_by_role("button", name="Keep it").click()
 
         expect(dialog).to_be_hidden()
-        self.assertEqual(self.service.get_booking(self.booking["id"])["status"], "active")
+        self.assertEqual(self.get_booking(self.booking["id"])["status"], "active")
 
     def test_cancel_booking(self):
         self.page.goto(f"/bookings/{self.booking['id']}")

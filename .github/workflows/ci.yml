@@ -58,7 +58,7 @@ jobs:
         run: pip install -r requirements-dev.txt
 
       - name: Run tests with coverage
-        run: coverage run --source=apartment_booking,apartments_service,common -m unittest -v
+        run: coverage run --source=bookings_service,apartments_service,common,booking_cli,devstack -m unittest -v
 
       - name: Coverage report
         run: |
@@ -179,30 +179,30 @@ jobs:
           docker compose start apartments
           docker compose up -d --wait
 
-      - name: Gateway routes by path; with the web app down only its parts fail
+      - name: Gateway routes by path; with the booking service down only its parts fail
         env:
           ID: ${{ steps.smoke.outputs.KEPT_APARTMENT_ID }}
         run: |
           # Compose prints ":0" for a port that isn't published, "host:port" otherwise.
-          published=$(docker compose port web 8000 2>/dev/null || true)
-          echo "web 8000 -> '$published'"
-          if echo "$published" | grep -q ':[1-9]'; then echo "web must not be published"; exit 1; fi
-          docker compose stop web
+          published=$(docker compose port bookings 8000 2>/dev/null || true)
+          echo "bookings 8000 -> '$published'"
+          if echo "$published" | grep -q ':[1-9]'; then echo "bookings must not be published"; exit 1; fi
+          docker compose stop bookings
           # /api/apartments goes straight to the apartments service and keeps working.
           curl -fsS --max-time 15 "http://localhost:8000/api/apartments?from=2099-01-01&to=2099-01-02" > /dev/null
-          # /api/bookings is the web app's: JSON 503 from nginx, quickly (--max-time).
+          # /api/bookings is the booking service's: JSON 503 from nginx, quickly (--max-time).
           test "$(curl -s --max-time 15 -o body.json -w '%{http_code}' http://localhost:8000/api/bookings)" = 503
           grep -q '"service_unavailable"' body.json
           # Deleting needs the booking service for the active-bookings check: 503, apartment kept.
           test "$(curl -s --max-time 15 -o body.json -w '%{http_code}' -X DELETE http://localhost:8000/api/apartments/$ID)" = 503
           grep -q '"service_unavailable"' body.json
-          docker compose start web
+          docker compose start bookings
           docker compose up -d --wait
-          curl -fsS http://localhost:8000/api/bookings > /dev/null   # nginx finds the restarted web app
+          curl -fsS http://localhost:8000/api/bookings > /dev/null   # nginx finds the restarted booking service
           curl -fsS http://localhost:8000/api/apartments/$ID > /dev/null
 
-      - name: CLI shares the data volume
-        run: docker compose run --rm booking apartment view ${{ steps.smoke.outputs.KEPT_APARTMENT_ID }}
+      - name: CLI works through the gateway
+        run: docker compose run --rm cli apartment view ${{ steps.smoke.outputs.KEPT_APARTMENT_ID }}
 
       - name: Tests run via Compose
         run: docker compose --profile test run --rm --build tests
