@@ -91,13 +91,15 @@ services:
       retries: 3
       start_period: 30s
 
-  # Gateway: the only way in from outside. /api/apartments -> apartments, the rest -> web.
+  # Gateway: the only way in from outside. Serves the frontend; /api/apartments ->
+  # apartments, the rest of /api -> web.
   nginx:
     image: nginx:1.27-alpine
     ports:
       - "127.0.0.1:${APP_PORT:-8000}:8000"
     volumes:
       - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./frontend:/usr/share/nginx/html:ro  # the static pages
     depends_on:
       web:
         condition: service_healthy
@@ -109,8 +111,8 @@ services:
       retries: 3
       start_period: 5s
 
-  # Web UI and bookings (/api/bookings, pages); calls the apartments service over
-  # HTTP. Internal only: reached through nginx.
+  # Booking service (/api/bookings); calls the apartments service over HTTP.
+  # Internal only: reached through nginx.
   web:
     build: .
     image: apartment-booking

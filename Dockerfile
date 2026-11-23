@@ -27,6 +27,8 @@ FROM base AS test
 COPY requirements-dev.txt ./
 RUN pip install -r requirements-dev.txt
 COPY tests/ ./tests/
+# Some tests check the static frontend that the gateway serves.
+COPY frontend/ ./frontend/
 USER app
 ENTRYPOINT ["python", "-m", "unittest"]
 CMD ["-v"]

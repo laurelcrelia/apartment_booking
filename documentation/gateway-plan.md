@@ -1,6 +1,6 @@
 # Plan: NGINX gateway, static frontend and two equal services
 
-Status: **in progress**: steps 1–3 done. Follows [microservices-plan.md](microservices-plan.md), which split apartments into their own service.
+Status: **in progress**: steps 1–4 done. Follows [microservices-plan.md](microservices-plan.md), which split apartments into their own service.
 
 ## Why
 
@@ -77,7 +77,7 @@ Containers: `nginx`, `apartments`, `apartments-worker`, `bookings`, `bookings-wo
 | Path | Goes to |
 |---|---|
 | `/`, `/apartments/{id}`, `/bookings`, `/bookings/{id}` | the matching static page; its JavaScript reads the ID from the URL |
-| `/static/*`, `/api/docs`, `/api/openapi.yaml` | static files |
+| `/static/*`, `/api/docs` | static files (`/api/openapi.yaml` stays served by the booking service, as part of the documented API) |
 | `/api/apartments`, `/api/apartments/*` | apartments service |
 | `/api/bookings`, `/api/bookings/*` | bookings service |
 | `/api/health` | answered by NGINX itself |
@@ -167,7 +167,7 @@ The HTTP API tests (`api_tests/`) must pass **unchanged** after every step: in C
 3. **Apartments service owns search and the delete check** (done):
    - NGINX routes `/api/apartments` straight to it
    - the booking service drops its apartment routes
-4. **Static frontend:**
+4. **Static frontend** (done):
    - rewrite the 4 pages and the API docs page as static files served by NGINX
    - remove the Flask templates and page routes
    - rework the Playwright tests

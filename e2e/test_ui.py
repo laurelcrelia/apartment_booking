@@ -202,6 +202,30 @@ class ApartmentPagesTests(BrowserTestCase):
         expect(self.page.get_by_role("heading", name="No apartments yet.")).to_be_visible()
 
 
+class StaticPageTests(BrowserTestCase):
+    """The pages are static files that load their data from the API."""
+
+    def test_unknown_apartment_shows_not_found(self):
+        self.page.goto("/apartments/999")
+        expect(self.page.get_by_role("heading", name="Not found")).to_be_visible()
+        expect(self.page.get_by_text("Apartment 999 not found")).to_be_visible()
+
+    def test_unreachable_service_shows_a_message(self):
+        self.context.route("**/api/apartments", lambda route: route.fulfill(
+            status=503, json={"error": {"code": "service_unavailable",
+                                        "message": "The service is unavailable; try again later"}}))
+        self.page.goto("/")
+        expect(self.page.get_by_role("heading", name="This page can't be loaded right now")).to_be_visible()
+        expect(self.page.get_by_text("The service is unavailable; try again later")).to_be_visible()
+        expect(self.page.get_by_role("link", name="Try again")).to_be_visible()
+
+    def test_names_are_shown_as_text(self):
+        apt = self.add_apartment("<b>Bold</b> <img src=x onerror=alert(1)>")
+        self.page.goto(f"/apartments/{apt['id']}")
+        expect(self.page.get_by_role("heading", name="<b>Bold</b> <img src=x onerror=alert(1)>")).to_be_visible()
+        expect(self.page.locator("main b, main img")).to_have_count(0)
+
+
 class BookingPagesTests(BrowserTestCase):
     def setUp(self):
         super().setUp()

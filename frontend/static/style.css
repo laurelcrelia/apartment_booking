@@ -325,3 +325,6 @@ dialog .actions { margin-top: 1.5rem; }
 }
 
 .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* Pages stay hidden until their data is loaded (see loadPage in app.js). */
+main.loading { visibility: hidden; }

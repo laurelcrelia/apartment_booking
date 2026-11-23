@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Apartments · Apartment Booking</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap">
+  <link rel="stylesheet" href="/static/style.css">
+  <script src="/static/app.js" defer></script>
+  <script src="/static/pages/apartments.js" defer></script>
+</head>
+<body>
+  <header class="topbar">
+    <nav>
+      <a class="brand" href="/"><span class="brand-mark" aria-hidden="true">AB</span><span class="brand-text">Apartment Booking</span></a>
+      <a href="/" aria-current="page">Apartments</a>
+      <a href="/bookings">Bookings</a>
+      <a href="/api/docs">API docs <span class="tag">v1</span></a>
+    </nav>
+  </header>
+  <noscript><p class="notice error">This app needs JavaScript.</p></noscript>
+  <main class="loading">
+    <header class="page-head">
+      <div>
+        <span class="eyebrow">Portfolio</span>
+        <h1>Apartments</h1>
+        <p class="lead">Manage your apartments and nightly rates, and check availability for any stay.</p>
+      </div>
+      <div class="chips">
+        <span class="chip"><span class="dot accent"></span><span id="apartment-count"></span></span>
+        <span class="chip"><span class="dot ok"></span><span id="active-count"></span></span>
+      </div>
+    </header>
+
+    <div class="split">
+      <section class="stack">
+        <div class="card flush">
+          <div class="card-head">
+            <div>
+              <h2>Registered apartments</h2>
+              <p>Nightly rates, room counts and active bookings</p>
+            </div>
+            <span class="count" id="apartment-total"></span>
+          </div>
+          <div id="apartment-list"></div>
+        </div>
+      </section>
+
+      <section class="stack">
+        <div class="card">
+          <div class="card-head">
+            <div>
+              <span class="eyebrow">Inventory search</span>
+              <h2>Search availability</h2>
+              <p>Find apartments that are free for every night of a stay</p>
+            </div>
+          </div>
+          <form data-api="/api/apartments" data-method="GET" data-render="search-results" data-nights>
+            <div class="row">
+              <div class="field"><label for="search-from">Check-in</label><input id="search-from" type="date" name="from" required></div>
+              <div class="field"><label for="search-to">Check-out</label><input id="search-to" type="date" name="to" required></div>
+            </div>
+            <p class="help" data-nights-label style="margin:-0.5rem 0 1rem">Check-out is exclusive.</p>
+            <div class="field">
+              <label for="search-rooms">Minimum rooms</label>
+              <input id="search-rooms" type="number" name="min_rooms" min="1" step="1" value="1" data-type="int">
+            </div>
+            <p class="notice error form-error" role="alert" hidden></p>
+            <button type="submit" class="block">Check availability</button>
+          </form>
+          <div id="search-results" aria-live="polite"></div>
+        </div>
+
+        <div class="card" id="add-apartment">
+          <div class="card-head">
+            <div>
+              <span class="eyebrow">New apartment</span>
+              <h2>Add apartment</h2>
+              <p>Register an apartment with its nightly rate</p>
+            </div>
+          </div>
+          <form data-api="/api/apartments" data-method="POST" data-redirect="/apartments/{id}" data-flash="Apartment added">
+            <div class="field"><label for="new-name">Name</label><input id="new-name" name="name" placeholder="e.g. Skyline Terrace 4B" required></div>
+            <div class="field"><label for="new-address">Address</label><input id="new-address" name="address" placeholder="e.g. Via Museo 18, Bolzano" required></div>
+            <div class="row">
+              <div class="field">
+                <label for="new-rooms">Rooms</label>
+                <input id="new-rooms" type="number" name="rooms" min="1" step="1" value="1" data-type="int">
+                <span class="help">At least 1</span>
+              </div>
+              <div class="field">
+                <label for="new-price">Price per night</label>
+                <div class="prefix"><span>€</span><input id="new-price" type="number" name="price" min="0" step="0.01" value="0" data-type="number"></div>
+                <span class="help">€0 or more</span>
+              </div>
+            </div>
+            <p class="notice error form-error" role="alert" hidden></p>
+            <div class="actions">
+              <button type="reset" class="secondary">Reset</button>
+              <button type="submit">Add apartment</button>
+            </div>
+          </form>
+        </div>
+      </section>
+    </div>
+  </main>
+  <footer><p>Apartment Booking · Continuous Integration and Delivery course project, unibz</p></footer>
+
+  <div id="flash" class="toast" role="status" aria-live="polite" hidden>
+    <div><strong>Done</strong><span data-message></span></div>
+    <button type="button" aria-label="Dismiss" data-dismiss>×</button>
+  </div>
+
+  <dialog id="confirm-dialog" aria-labelledby="confirm-title">
+    <form method="dialog">
+      <h2 id="confirm-title">Are you sure?</h2>
+      <p data-message></p>
+      <div class="actions">
+        <button value="cancel" class="secondary">Keep it</button>
+        <button value="ok" class="danger solid" data-ok>Confirm</button>
+      </div>
+    </form>
+  </dialog>
+</body>
+</html>

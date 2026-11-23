@@ -8,12 +8,11 @@ from apartment_booking.api import SPEC_PATH
 from apartment_booking.service import open_service
 from werkzeug.test import Client
 
-from apartment_booking.local import create_local_app
+from apartment_booking.local import FRONTEND_DIR, PAGES, create_local_app
 from apartment_booking.web import create_app
 from apartments_service.app import create_app as create_apartments_app
 
-# HTML pages under /api that are deliberately not part of the JSON API.
-UNDOCUMENTED = {"/api/docs"}
+NGINX_CONF = FRONTEND_DIR.parent / "nginx" / "default.conf"
 
 
 class OpenApiSpecTests(unittest.TestCase):
@@ -31,7 +30,7 @@ class OpenApiSpecTests(unittest.TestCase):
         prefix = self.spec["servers"][0]["url"]
         routes = set()
         for rule in (rule for app in apps for rule in app.url_map.iter_rules()):
-            if not rule.rule.startswith(prefix + "/") or rule.rule in UNDOCUMENTED:
+            if not rule.rule.startswith(prefix + "/"):
                 continue
             path = re.sub(r"<(?:\w+:)?(\w+)>", r"{\1}", rule.rule[len(prefix):])
             for method in rule.methods - {"HEAD", "OPTIONS"}:
@@ -44,52 +43,58 @@ class OpenApiSpecTests(unittest.TestCase):
         self.assertEqual(routes, documented)
 
 
-class PageTests(unittest.TestCase):
+class FrontendTests(unittest.TestCase):
+    """The static frontend, as the gateway serves it (apartment_booking/local.py)."""
+
     def setUp(self):
         self.client = Client(create_local_app(open_service()))
-        self.client.post("/api/apartments", json={"name": "Loft <b>", "address": "1 Beach Rd"})
-        self.client.post("/api/bookings", json={
-            "apartment_id": 1, "check_in": "2026-11-01", "check_out": "2026-11-05", "guest": "Ann"})
 
-    def get(self, url):
-        r = self.client.get(url)
-        self.assertEqual(r.status_code, 200)
-        self.assertEqual(r.mimetype, "text/html")
-        return r.get_data(as_text=True)
+    def get(self, path, status=200):
+        r = self.client.get(path)
+        self.assertEqual(r.status_code, status, path)
+        return r
 
-    def test_apartments_page_lists_and_has_forms(self):
-        html = self.get("/")
-        self.assertIn("Loft &lt;b&gt;", html)  # escaped
-        self.assertIn('data-api="/api/apartments" data-method="POST"', html)
-        self.assertIn('data-api="/api/apartments" data-method="GET"', html)
+    def test_each_page_url_gets_its_html_file(self):
+        for path, page in [("/", "index.html"), ("/apartments/12", "apartment.html"), ("/bookings", "bookings.html"),
+                           ("/bookings/3", "booking.html"), ("/api/docs", "api-docs.html")]:
+            with self.subTest(path=path):
+                r = self.get(path)
+                self.assertEqual(r.mimetype, "text/html")
+                self.assertEqual(r.data, (FRONTEND_DIR / page).read_bytes())
 
-    def test_apartment_page(self):
-        html = self.get("/apartments/1?from=2026-12-01&to=2026-12-03")
-        self.assertIn('data-method="PATCH"', html)
-        self.assertIn('data-method="DELETE"', html)
-        self.assertIn('value="2026-12-01"', html)  # booking form prefilled from search
-        self.assertIn("Ann", html)
+    def test_pages_include_existing_scripts_and_styles(self):
+        for page in FRONTEND_DIR.glob("*.html"):
+            for url in re.findall(r'(?:src|href)="(/static/[^"]+)"', page.read_text()):
+                with self.subTest(page=page.name, url=url):
+                    self.get(url)
 
-    def test_bookings_page_filters(self):
-        self.assertIn("Ann", self.get("/bookings"))
-        self.assertNotIn("Ann", self.get("/bookings?guest=Bob"))
-        self.client.patch("/api/bookings/1", json={"status": "cancelled"})
-        self.assertNotIn("Ann", self.get("/bookings"))
-        self.assertIn("Ann", self.get("/bookings?include_cancelled=true&apartment_id=1"))
+    def test_static_files(self):
+        self.assertEqual(self.get("/static/app.js").mimetype, "text/javascript")
+        self.assertEqual(self.get("/static/style.css").mimetype, "text/css")
+        self.get("/static/missing.js", 404)
+        self.get("/static/../apartment_booking/service.py", 404)  # can't leave static/
 
-    def test_booking_page(self):
-        html = self.get("/bookings/1")
-        self.assertIn('name="status" value="cancelled"', html)
-        self.client.patch("/api/bookings/1", json={"status": "cancelled"})
-        self.assertIn("can no longer be changed", self.get("/bookings/1"))
+    def test_unknown_paths_get_the_404_page(self):
+        for path in ("/nope", "/apartments", "/apartments/abc", "/bookings/1/edit", "/index.html"):
+            with self.subTest(path=path):
+                self.assertIn(b"Page not found", self.get(path, 404).data)
 
-    def test_api_docs_page(self):
-        self.assertIn("/api/openapi.yaml", self.get("/api/docs"))
+    def test_api_still_goes_to_the_services(self):
+        self.assertEqual(self.get("/api/bookings").json, [])
+        self.assertEqual(self.get("/api/apartments").json, [])
+        self.assertEqual(self.get("/api/nothing", 404).json["error"]["code"], "not_found")
 
-    def test_unknown_pages_are_404(self):
-        for url in ("/apartments/9", "/bookings/9"):
-            with self.subTest(url=url):
-                self.assertEqual(self.client.get(url).status_code, 404)
+    def test_web_app_serves_no_pages(self):
+        client = create_app(open_service()).test_client()
+        for path in ("/", "/bookings", "/static/app.js", "/api/docs"):
+            with self.subTest(path=path):
+                self.assertEqual(client.get(path).status_code, 404)
+
+    def test_nginx_serves_the_same_pages(self):
+        if not NGINX_CONF.exists():
+            self.skipTest("nginx/ isn't in the Docker test image")
+        nginx_pages = set(re.findall(r"try_files /([\w-]+\.html)", NGINX_CONF.read_text()))
+        self.assertEqual(nginx_pages, {page for _, page in PAGES})
 
 
 if __name__ == "__main__":

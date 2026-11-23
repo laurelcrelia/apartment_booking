@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Booking · Apartment Booking</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap">
+  <link rel="stylesheet" href="/static/style.css">
+  <script src="/static/app.js" defer></script>
+  <script src="/static/pages/booking.js" defer></script>
+</head>
+<body>
+  <header class="topbar">
+    <nav>
+      <a class="brand" href="/"><span class="brand-mark" aria-hidden="true">AB</span><span class="brand-text">Apartment Booking</span></a>
+      <a href="/">Apartments</a>
+      <a href="/bookings" aria-current="page">Bookings</a>
+      <a href="/api/docs">API docs <span class="tag">v1</span></a>
+    </nav>
+  </header>
+  <noscript><p class="notice error">This app needs JavaScript.</p></noscript>
+  <main class="loading">
+    <nav class="crumbs" aria-label="Breadcrumb">
+      <a href="/bookings">Bookings</a><span>/</span><span data-field="number"></span>
+    </nav>
+    <div class="title-row" style="margin-bottom:1.5rem">
+      <h1 id="booking-title"></h1>
+      <span id="booking-status"></span>
+    </div>
+
+    <div class="card hero">
+      <div class="with-avatar">
+        <span class="avatar lg" aria-hidden="true" id="apartment-initials"></span>
+        <div>
+          <div id="apartment-heading"></div>
+          <p class="address" style="margin:0.25rem 0 0" data-field="dates"></p>
+        </div>
+      </div>
+      <div class="stats">
+        <div class="stat"><span class="label">Stay length</span><span class="value" data-field="nights"></span><span class="sub">check-out exclusive</span></div>
+        <div class="stat" id="total-stat" hidden><span class="label">Est. total</span><span class="value" id="stat-total"></span><span class="sub" id="stat-rate"></span></div>
+      </div>
+    </div>
+
+    <div class="split" id="active-view" hidden>
+      <section class="card">
+        <div class="card-head">
+          <div>
+            <h2>Change booking</h2>
+            <p>Move the dates, switch apartment or update the guest</p>
+          </div>
+        </div>
+        <form id="change-form" data-method="PATCH" data-flash="Booking changed" data-nights>
+          <div class="field">
+            <label for="change-apartment">Apartment</label>
+            <select id="change-apartment" name="apartment_id" data-type="int" required></select>
+          </div>
+          <div class="field">
+            <label for="change-guest">Guest name <span class="optional">Optional</span></label>
+            <input id="change-guest" name="guest">
+          </div>
+          <div class="row">
+            <div class="field"><label for="change-in">Check-in</label><input id="change-in" type="date" name="check_in" required></div>
+            <div class="field"><label for="change-out">Check-out</label><input id="change-out" type="date" name="check_out" required></div>
+          </div>
+          <dl class="summary" data-summary>
+          <div><dt>Stay</dt><dd data-nights-label>Pick check-in and check-out</dd></div>
+          <div><dt>Nightly rate</dt><dd data-rate>–</dd></div>
+          <div class="total"><dt>Estimated total</dt><dd data-total>–</dd></div>
+        </dl>
+          <p class="notice error form-error" role="alert" hidden></p>
+          <div class="actions">
+            <button type="reset" class="secondary">Reset to original</button>
+            <button type="submit">Save changes</button>
+          </div>
+        </form>
+      </section>
+
+      <div class="stack">
+        <section class="card danger-zone">
+          <div class="card-head"><h2>Cancel booking</h2></div>
+          <form id="cancel-form" data-method="PATCH" data-flash="Booking cancelled">
+            <input type="hidden" name="status" value="cancelled">
+            <p class="hint">Cancelling frees the dates for new bookings. Cancelled bookings are kept but can't be changed.</p>
+            <p class="notice error form-error" role="alert" hidden></p>
+            <button type="submit" class="danger block">Cancel booking</button>
+          </form>
+        </section>
+
+        <section class="card">
+          <span class="eyebrow">Guest</span>
+          <div class="with-avatar">
+            <span class="avatar lg" aria-hidden="true" id="guest-initials"></span>
+            <span class="primary" data-field="guest"></span>
+          </div>
+        </section>
+      </div>
+    </div>
+
+    <section class="card" id="cancelled-view" hidden>
+      <p class="notice info">This booking is cancelled and can no longer be changed.</p>
+      <dl class="facts">
+        <div><dt>Apartment</dt><dd id="fact-apartment"></dd></div>
+        <div><dt>Guest</dt><dd id="fact-guest"></dd></div>
+        <div><dt>Dates</dt><dd class="num" id="fact-dates"></dd></div>
+      </dl>
+    </section>
+  </main>
+  <footer><p>Apartment Booking · Continuous Integration and Delivery course project, unibz</p></footer>
+
+  <div id="flash" class="toast" role="status" aria-live="polite" hidden>
+    <div><strong>Done</strong><span data-message></span></div>
+    <button type="button" aria-label="Dismiss" data-dismiss>×</button>
+  </div>
+
+  <dialog id="confirm-dialog" aria-labelledby="confirm-title">
+    <form method="dialog">
+      <h2 id="confirm-title">Are you sure?</h2>
+      <p data-message></p>
+      <div class="actions">
+        <button value="cancel" class="secondary">Keep it</button>
+        <button value="ok" class="danger solid" data-ok>Confirm</button>
+      </div>
+    </form>
+  </dialog>
+</body>
+</html>
