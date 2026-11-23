@@ -6,11 +6,13 @@ import threading
 import unittest
 from contextlib import closing, redirect_stderr, redirect_stdout
 from io import StringIO
+from unittest import mock
 
 from apartment_booking.migrate import MigrationError, main, migrate
 from apartment_booking.repos import BookingRepo
 from apartments_service.repo import ApartmentRepo
 from apartment_booking.service import OverlapError, open_service
+from common.db import Database
 
 
 class TempDirTestCase(unittest.TestCase):
@@ -54,6 +56,68 @@ class ApartmentRepoTests(TempDirTestCase):
         path = os.path.join(self.dir, "nested", "dir", "apartments.db")
         ApartmentRepo(path).add("A", "x", 1, 0)
         self.assertTrue(os.path.exists(path))
+
+
+class DatabaseSetupTests(TempDirTestCase):
+    SCHEMA = "CREATE TABLE IF NOT EXISTS t (id INTEGER PRIMARY KEY);"
+
+    def test_many_processes_opening_a_new_database_at_once(self):
+        # Regression: two gunicorn workers opening a fresh database together
+        # could fail with "database is locked" while switching it to WAL.
+        for attempt in range(20):
+            path = os.path.join(self.dir, f"new{attempt}.db")
+            barrier, errors = threading.Barrier(4), []
+
+            def open_db():
+                barrier.wait()
+                try:
+                    Database(path, self.SCHEMA)
+                except sqlite3.OperationalError as e:
+                    errors.append(e)
+
+            threads = [threading.Thread(target=open_db) for _ in range(4)]
+            for t in threads:
+                t.start()
+            for t in threads:
+                t.join()
+            self.assertEqual(errors, [])
+            with closing(sqlite3.connect(path)) as conn:
+                self.assertEqual(conn.execute("PRAGMA journal_mode").fetchone()[0], "wal")
+
+    def locked_at_first(self, times, error="database is locked"):
+        """A Database whose first `times` connections fail like a locked file."""
+        attempts = []
+
+        class Flaky(Database):
+            def _connect(self):
+                attempts.append(1)
+                if len(attempts) <= times:
+                    class Locked:
+                        def execute(self, *args):
+                            raise sqlite3.OperationalError(error)
+
+                        def close(self):
+                            pass
+                    return Locked()
+                return super()._connect()
+        return Flaky, attempts
+
+    def test_setup_retries_while_locked(self):
+        flaky, attempts = self.locked_at_first(3)
+        flaky(self.apartments_db, self.SCHEMA)
+        self.assertEqual(len(attempts), 4)
+
+    def test_setup_gives_up_after_the_timeout(self):
+        flaky, _ = self.locked_at_first(10_000)
+        with mock.patch("common.db.SETUP_TIMEOUT", 0.05):
+            with self.assertRaisesRegex(sqlite3.OperationalError, "locked"):
+                flaky(self.apartments_db, self.SCHEMA)
+
+    def test_other_errors_are_not_retried(self):
+        flaky, attempts = self.locked_at_first(1, error="disk I/O error")
+        with self.assertRaisesRegex(sqlite3.OperationalError, "disk I/O"):
+            flaky(self.apartments_db, self.SCHEMA)
+        self.assertEqual(len(attempts), 1)
 
 
 class TransactionTests(TempDirTestCase):
