@@ -40,11 +40,12 @@ services:
       retries: 3
       start_period: 5s
 
-  # Publishes the apartments service's outbox events to RabbitMQ.
-  apartments-relay:
+  # Apartments worker: publishes apartment events (outbox relay) and keeps the
+  # apartments service's bookings replica up to date from booking events.
+  apartments-worker:
     build: .
     image: apartment-booking
-    command: ["python", "-m", "apartments_service.relay"]
+    command: ["python", "-m", "apartments_service.worker"]
     environment:
       RABBITMQ_URL: *rabbitmq-url
     volumes:
@@ -55,28 +56,33 @@ services:
       rabbitmq:
         condition: service_healthy
     restart: unless-stopped
-    healthcheck:  # healthy while connected to RabbitMQ and polling the outbox
-      test: ["CMD", "python", "-m", "common.health", "/tmp/apartments-relay.heartbeat"]
+    healthcheck:  # healthy while both its relay and its consumer are connected and working
+      test: ["CMD", "python", "-m", "common.health",
+             "/tmp/apartments-relay.heartbeat", "/tmp/apartments-consumer.heartbeat"]
       interval: 10s
       timeout: 3s
       retries: 3
       start_period: 30s
 
-  # Keeps the apartments replica in bookings.db up to date from those events.
-  booking-consumer:
+  # Booking worker: publishes booking events (outbox relay) and keeps the
+  # booking side's apartments replica up to date from apartment events.
+  bookings-worker:
     build: .
     image: apartment-booking
-    command: ["python", "-m", "apartment_booking.consumer"]
+    command: ["python", "-m", "apartment_booking.worker"]
     environment:
       RABBITMQ_URL: *rabbitmq-url
     volumes:
       - booking-data:/data
     depends_on:
+      web:
+        condition: service_healthy
       rabbitmq:
         condition: service_healthy
     restart: unless-stopped
-    healthcheck:  # healthy while connected to RabbitMQ and consuming its queue
-      test: ["CMD", "python", "-m", "common.health", "/tmp/booking-consumer.heartbeat"]
+    healthcheck:  # healthy while both its relay and its consumer are connected and working
+      test: ["CMD", "python", "-m", "common.health",
+             "/tmp/bookings-relay.heartbeat", "/tmp/bookings-consumer.heartbeat"]
       interval: 10s
       timeout: 3s
       retries: 3

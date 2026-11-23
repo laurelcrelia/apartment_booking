@@ -16,6 +16,7 @@ import sys
 from apartments_service.repo import ApartmentRepo, enqueue_snapshot
 
 from .repos import BookingRepo
+from .repos import enqueue_snapshot as enqueue_bookings_snapshot
 
 
 class MigrationError(Exception):
@@ -56,6 +57,8 @@ def migrate(json_path: str, apartments_db: str, bookings_db: str) -> tuple[int, 
             [(b["id"], b["apartment_id"], b["guest"], b["check_in"], b["check_out"], b["status"])
              for b in books])
         _set_next_id(conn, "bookings", state["next_booking_id"])
+        # Announce the imported bookings, so the apartments service's replica learns about them.
+        enqueue_bookings_snapshot(conn)
     return len(apts), len(books)
 
 

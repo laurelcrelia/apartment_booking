@@ -85,15 +85,25 @@ compose-e2e:
     - docker compose up -d --wait
     - curl -fsS http://localhost:$APP_PORT/api/apartments/$ID
     # Apartment changes reach the booking side through RabbitMQ, even if the consumer was down.
-    - docker compose stop booking-consumer
+    - docker compose stop bookings-worker
     - "curl -fsS -X PATCH -H 'Content-Type: application/json' -d '{\"rooms\": 7}' http://localhost:$APP_PORT/api/apartments/$ID"
-    - docker compose start booking-consumer
+    - docker compose start bookings-worker
     - |
       for i in $(seq 30); do
         curl -fsS "http://localhost:$APP_PORT/api/apartments?from=2099-12-01&to=2099-12-02&min_rooms=7" \
           | python3 -c "import json, sys; sys.exit(not any(a['id'] == $ID for a in json.load(sys.stdin)))" \
           && break
         [ "$i" = 30 ] && { echo "apartment $ID never showed up in search"; exit 1; }
+        sleep 1
+      done
+    # Booking events reach the apartments service through RabbitMQ.
+    - |
+      BID=$(curl -fsS -X POST -H 'Content-Type: application/json' \
+        -d "{\"apartment_id\": $ID, \"check_in\": \"2099-12-20\", \"check_out\": \"2099-12-21\"}" \
+        http://localhost:$APP_PORT/api/bookings | python3 -c "import json, sys; print(json.load(sys.stdin)['id'])")
+      for i in $(seq 30); do
+        docker compose logs apartments-worker | grep -q "applied booking.created for booking $BID " && break
+        [ "$i" = 30 ] && { echo "booking $BID never reached the apartments service"; exit 1; }
         sleep 1
       done
     # Apartments service down: 503 for apartments, bookings still work from the replica.

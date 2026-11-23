@@ -37,14 +37,23 @@ class HeartbeatTests(unittest.TestCase):
         os.utime(self.path, (old, old))
         self.assertFalse(is_fresh(self.path))
         self.assertEqual(self.run_main(self.path)[0], 1)
-        self.assertEqual(self.run_main(self.path, "120")[0], 0)
+        self.assertEqual(self.run_main(self.path, "--max-age", "120")[0], 0)
         beat(self.path)
         self.assertTrue(is_fresh(self.path))
 
+    def test_every_file_must_be_fresh(self):
+        other = self.path + ".other"
+        beat(self.path)
+        code, err = self.run_main(self.path, other)
+        self.assertEqual(code, 1)
+        self.assertIn(other, err)
+        beat(other)
+        self.assertEqual(self.run_main(self.path, other)[0], 0)
+
     def test_usage(self):
-        code, err = self.run_main()
-        self.assertEqual(code, 2)
-        self.assertIn("usage", err)
+        with self.assertRaises(SystemExit) as ctx:
+            self.run_main()
+        self.assertEqual(ctx.exception.code, 2)
 
 
 if __name__ == "__main__":
