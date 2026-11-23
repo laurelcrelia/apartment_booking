@@ -1,7 +1,12 @@
 __pycache__/
 *.pyc
 data.json
+*.db
+*.db-wal
+*.db-shm
 *.tmp
+# Local secrets (see .env.example)
+.env
 .DS_Store
 .coverage
 htmlcov/

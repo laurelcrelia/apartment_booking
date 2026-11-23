@@ -18,6 +18,9 @@ variables:
   # touches the app you run yourself on the same machine.
   COMPOSE_PROJECT_NAME: ci-$CI_JOB_ID
   BOOKING_VOLUME: booking-data-ci-$CI_JOB_ID
+  APARTMENTS_VOLUME: apartments-data-ci-$CI_JOB_ID
+  RABBITMQ_VOLUME: rabbitmq-data-ci-$CI_JOB_ID
+  RABBITMQ_UI_PORT: "25672"
   APP_PORT: "18000"
 
 docker-test:
@@ -38,7 +41,7 @@ coverage:
   script:
     - python3 -m venv .venv
     - .venv/bin/pip install -r requirements-dev.txt
-    - .venv/bin/coverage run --source=apartment_booking -m unittest -v
+    - .venv/bin/coverage run --source=apartment_booking,apartments_service,common -m unittest -v
     - .venv/bin/coverage report -m
     - .venv/bin/coverage xml
     - .venv/bin/coverage html
@@ -52,6 +55,13 @@ coverage:
         coverage_format: cobertura
         path: coverage.xml
 
+api-tests:
+  stage: test
+  script:
+    - python3 -m venv .venv
+    - .venv/bin/pip install -r requirements.txt
+    - .venv/bin/python -m unittest discover -s api_tests -v
+
 playwright:
   stage: e2e
   script:
@@ -64,13 +74,34 @@ playwright:
 compose-e2e:
   stage: e2e
   script:
+    # Throwaway RabbitMQ password for this job; after_script reads the same .env.
+    - printf 'RABBITMQ_PASSWORD=%s\n' "$(openssl rand -hex 24)" > .env
     - docker compose up -d --build --wait
     - python3 scripts/smoke_test.py http://localhost:$APP_PORT --keep > smoke.log || { cat smoke.log; exit 1; }
     - cat smoke.log
+    - API_BASE_URL=http://localhost:$APP_PORT python3 -m unittest discover -s api_tests -v
     - ID=$(grep KEPT_APARTMENT_ID smoke.log | cut -d= -f2)
     - docker compose down
     - docker compose up -d --wait
     - curl -fsS http://localhost:$APP_PORT/api/apartments/$ID
+    # Apartment changes reach the booking side through RabbitMQ, even if the consumer was down.
+    - docker compose stop booking-consumer
+    - "curl -fsS -X PATCH -H 'Content-Type: application/json' -d '{\"rooms\": 7}' http://localhost:$APP_PORT/api/apartments/$ID"
+    - docker compose start booking-consumer
+    - |
+      for i in $(seq 30); do
+        curl -fsS "http://localhost:$APP_PORT/api/apartments?from=2099-12-01&to=2099-12-02&min_rooms=7" \
+          | python3 -c "import json, sys; sys.exit(not any(a['id'] == $ID for a in json.load(sys.stdin)))" \
+          && break
+        [ "$i" = 30 ] && { echo "apartment $ID never showed up in search"; exit 1; }
+        sleep 1
+      done
+    # Apartments service down: 503 for apartments, bookings still work from the replica.
+    - docker compose stop apartments
+    - test "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:$APP_PORT/api/apartments)" = 503
+    - "curl -fsS -X POST -H 'Content-Type: application/json' -d \"{\\\"apartment_id\\\": $ID, \\\"check_in\\\": \\\"2099-12-10\\\", \\\"check_out\\\": \\\"2099-12-11\\\"}\" http://localhost:$APP_PORT/api/bookings"
+    - docker compose start apartments
+    - docker compose up -d --wait
     - docker compose run --rm booking apartment view $ID
     - docker compose --profile test run --rm --build tests
   after_script:

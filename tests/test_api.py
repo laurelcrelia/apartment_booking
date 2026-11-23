@@ -1,14 +1,15 @@
 import os
 import tempfile
 import unittest
+from unittest import mock
 
-from apartment_booking.storage import JsonStorage, MemoryStorage
+from apartment_booking.service import open_service
 from apartment_booking.web import create_app
 
 
 class ApiTestCase(unittest.TestCase):
     def setUp(self):
-        self.client = create_app(MemoryStorage()).test_client()
+        self.client = create_app(open_service()).test_client()
 
     def add_apartment(self, **fields):
         body = {"name": "Loft", "address": "1 Beach Rd", **fields}
@@ -257,30 +258,25 @@ class MetaApiTests(ApiTestCase):
 class PersistenceTests(unittest.TestCase):
     def test_data_survives_app_restart(self):
         with tempfile.TemporaryDirectory() as tmp:
-            path = os.path.join(tmp, "data.json")
-            client = create_app(JsonStorage(path)).test_client()
+            dbs = os.path.join(tmp, "apartments.db"), os.path.join(tmp, "bookings.db")
+            client = create_app(open_service(*dbs)).test_client()
             client.post("/api/apartments", json={"name": "Loft", "address": "x"})
             client.post("/api/bookings", json={
                 "apartment_id": 1, "check_in": "2026-11-01", "check_out": "2026-11-05"})
 
-            restarted = create_app(JsonStorage(path)).test_client()
+            restarted = create_app(open_service(*dbs)).test_client()
             self.assertEqual(restarted.get("/api/apartments/1").json["name"], "Loft")
             self.assertEqual(restarted.get("/api/bookings/1").json["status"], "active")
 
-    def test_default_data_file_comes_from_environment(self):
+    def test_default_databases_come_from_environment(self):
         with tempfile.TemporaryDirectory() as tmp:
-            path = os.path.join(tmp, "env.json")
-            old = os.environ.get("APT_DATA_FILE")
-            os.environ["APT_DATA_FILE"] = path
-            try:
+            env = {"APARTMENTS_DB": os.path.join(tmp, "a", "apts.db"),
+                   "BOOKINGS_DB": os.path.join(tmp, "b", "books.db")}
+            with mock.patch.dict(os.environ, env):
                 create_app().test_client().post(
                     "/api/apartments", json={"name": "Loft", "address": "x"})
-            finally:
-                if old is None:
-                    del os.environ["APT_DATA_FILE"]
-                else:
-                    os.environ["APT_DATA_FILE"] = old
-            self.assertTrue(os.path.exists(path))
+            for path in env.values():
+                self.assertTrue(os.path.exists(path), path)
 
 
 if __name__ == "__main__":

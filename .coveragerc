@@ -1,0 +1,3 @@
+[run]
+# Needs a running RabbitMQ; exercised by the Docker Compose CI jobs instead.
+omit = common/rabbitmq.py

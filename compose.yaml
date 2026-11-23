@@ -1,11 +1,37 @@
+# Credentials come from the environment or a git-ignored .env file next to this
+# file (see .env.example); nothing secret is stored in the repository. Compose
+# refuses to start without RABBITMQ_PASSWORD.
+x-rabbitmq-url: &rabbitmq-url "amqp://${RABBITMQ_USER:-booking}:${RABBITMQ_PASSWORD:?Set RABBITMQ_PASSWORD in .env, see .env.example}@rabbitmq:5672/"
+
 services:
-  web:
+  # Message broker for events between services. Management UI:
+  # http://localhost:15672 (log in with RABBITMQ_USER and RABBITMQ_PASSWORD).
+  rabbitmq:
+    image: rabbitmq:4.1-management
+    environment:
+      # Only used when the rabbitmq-data volume is first created.
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-booking}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:?Set RABBITMQ_PASSWORD in .env, see .env.example}
+    ports:
+      - "127.0.0.1:${RABBITMQ_UI_PORT:-15672}:15672"
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  # Apartments service: internal only (no published port), with its own database.
+  apartments:
     build: .
     image: apartment-booking
-    ports:
-      - "127.0.0.1:${APP_PORT:-8000}:8000"
+    command: ["gunicorn", "--bind", "0.0.0.0:8000", "--workers", "2", "--threads", "4",
+              "--access-logfile", "-", "apartments_service.app:create_app()"]
     volumes:
-      - booking-data:/data
+      - apartments-data:/data
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health')"]
@@ -14,15 +40,83 @@ services:
       retries: 3
       start_period: 5s
 
-  # Command-line interface, sharing the web app's data volume:
+  # Publishes the apartments service's outbox events to RabbitMQ.
+  apartments-relay:
+    build: .
+    image: apartment-booking
+    command: ["python", "-m", "apartments_service.relay"]
+    environment:
+      RABBITMQ_URL: *rabbitmq-url
+    volumes:
+      - apartments-data:/data
+    depends_on:
+      apartments:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:  # healthy while connected to RabbitMQ and polling the outbox
+      test: ["CMD", "python", "-m", "common.health", "/tmp/apartments-relay.heartbeat"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 30s
+
+  # Keeps the apartments replica in bookings.db up to date from those events.
+  booking-consumer:
+    build: .
+    image: apartment-booking
+    command: ["python", "-m", "apartment_booking.consumer"]
+    environment:
+      RABBITMQ_URL: *rabbitmq-url
+    volumes:
+      - booking-data:/data
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:  # healthy while connected to RabbitMQ and consuming its queue
+      test: ["CMD", "python", "-m", "common.health", "/tmp/booking-consumer.heartbeat"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 30s
+
+  # Web UI, public REST API and bookings; calls the apartments service over HTTP.
+  web:
+    build: .
+    image: apartment-booking
+    ports:
+      - "127.0.0.1:${APP_PORT:-8000}:8000"
+    environment:
+      APARTMENTS_URL: http://apartments:8000
+    volumes:
+      - booking-data:/data
+    depends_on:
+      apartments:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health')"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+
+  # Command-line interface, sharing the web app's data volume and apartments service:
   #   docker compose run --rm booking apartment list
   booking:
     build: .
     image: apartment-booking
     entrypoint: ["python", "booking.py"]
     command: ["--help"]
+    environment:
+      APARTMENTS_URL: http://apartments:8000
     volumes:
       - booking-data:/data
+    depends_on:
+      apartments:
+        condition: service_healthy
     profiles: ["cli"]
 
   tests:
@@ -33,6 +127,10 @@ services:
     profiles: ["test"]
 
 volumes:
+  # Names are overridable so CI on a developer machine never touches the real data.
   booking-data:
-    # Overridable so CI on a developer machine never touches the real data.
     name: ${BOOKING_VOLUME:-booking-data}
+  apartments-data:
+    name: ${APARTMENTS_VOLUME:-apartments-data}
+  rabbitmq-data:
+    name: ${RABBITMQ_VOLUME:-rabbitmq-data}

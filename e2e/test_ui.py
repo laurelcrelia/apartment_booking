@@ -20,9 +20,8 @@ import unittest
 from playwright.sync_api import Page, expect, sync_playwright
 from werkzeug.serving import WSGIRequestHandler, make_server
 
-from apartment_booking.service import BookingService
-from apartment_booking.storage import MemoryStorage
-from apartment_booking.web import SerializedService, create_app
+from apartment_booking.service import open_service
+from apartment_booking.web import create_app
 
 HEADED = os.environ.get("HEADED") == "1"
 WEB_FONTS = re.compile(r"https://fonts\.(googleapis|gstatic)\.com/.*")
@@ -36,7 +35,7 @@ class QuietHandler(WSGIRequestHandler):
 class BrowserTestCase(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.app = create_app(MemoryStorage())
+        cls.app = create_app(open_service())
         cls.server = make_server("127.0.0.1", 0, cls.app, threaded=True, request_handler=QuietHandler)
         cls.base_url = f"http://127.0.0.1:{cls.server.server_port}"
         threading.Thread(target=cls.server.serve_forever, daemon=True).start()
@@ -50,7 +49,7 @@ class BrowserTestCase(unittest.TestCase):
         cls.server.shutdown()
 
     def setUp(self):
-        self.service = SerializedService(BookingService(MemoryStorage()))
+        self.service = open_service()
         self.app.extensions["booking_service"] = self.service
         self.context = self.browser.new_context(base_url=self.base_url)
         self.context.route(WEB_FONTS, lambda route: route.abort())  # system fonts; no internet needed

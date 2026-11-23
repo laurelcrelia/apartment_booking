@@ -5,7 +5,7 @@ import yaml
 from openapi_spec_validator import validate
 
 from apartment_booking.api import SPEC_PATH
-from apartment_booking.storage import MemoryStorage
+from apartment_booking.service import open_service
 from apartment_booking.web import create_app
 
 # HTML pages under /api that are deliberately not part of the JSON API.
@@ -21,7 +21,7 @@ class OpenApiSpecTests(unittest.TestCase):
         validate(self.spec)
 
     def test_every_api_route_is_documented(self):
-        app = create_app(MemoryStorage())
+        app = create_app(open_service())
         prefix = self.spec["servers"][0]["url"]
         routes = set()
         for rule in app.url_map.iter_rules():
@@ -40,7 +40,7 @@ class OpenApiSpecTests(unittest.TestCase):
 
 class PageTests(unittest.TestCase):
     def setUp(self):
-        self.client = create_app(MemoryStorage()).test_client()
+        self.client = create_app(open_service()).test_client()
         self.client.post("/api/apartments", json={"name": "Loft <b>", "address": "1 Beach Rd"})
         self.client.post("/api/bookings", json={
             "apartment_id": 1, "check_in": "2026-11-01", "check_out": "2026-11-05", "guest": "Ann"})

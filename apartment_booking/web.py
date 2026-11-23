@@ -6,45 +6,33 @@ Run in Docker: docker compose up -d --build --wait
 from __future__ import annotations
 
 import os
-import threading
 from datetime import date
 
 from flask import Blueprint, Flask, abort, current_app, render_template, request
 from werkzeug.exceptions import HTTPException
 
-from .api import api, handle_http_error
-from .service import BookingService, NotFoundError
-from .storage import JsonStorage
+from common.http import handle_http_error
+
+from .api import api
+from .service import BookingService, NotFoundError, ServiceUnavailableError, open_service
 
 pages = Blueprint("pages", __name__)
 
 
-class SerializedService:
-    """Runs one service call at a time.
+def create_app(service: BookingService | None = None) -> Flask:
+    """Build the app; without a service it is configured from the environment:
 
-    Every service method loads the JSON file, changes it and saves it again,
-    so concurrent requests must not interleave or updates could be lost.
-    This only guards a single process: run the server with one worker.
+    BOOKINGS_DB     bookings database (default: bookings.db)
+    APARTMENTS_URL  apartments service, e.g. http://apartments:8000; if unset,
+                    apartments are served in-process from APARTMENTS_DB
+                    (default: apartments.db)
     """
-
-    def __init__(self, service: BookingService):
-        self._service = service
-        self._lock = threading.Lock()
-
-    def __getattr__(self, name):
-        method = getattr(self._service, name)
-
-        def call(*args, **kwargs):
-            with self._lock:
-                return method(*args, **kwargs)
-        return call
-
-
-def create_app(storage=None) -> Flask:
     app = Flask(__name__)
-    if storage is None:
-        storage = JsonStorage(os.environ.get("APT_DATA_FILE", "data.json"))
-    app.extensions["booking_service"] = SerializedService(BookingService(storage))
+    if service is None:
+        service = open_service(os.environ.get("APARTMENTS_DB", "apartments.db"),
+                               os.environ.get("BOOKINGS_DB", "bookings.db"),
+                               os.environ.get("APARTMENTS_URL"))
+    app.extensions["booking_service"] = service
     app.register_blueprint(api)
     app.register_blueprint(pages)
     app.register_error_handler(HTTPException, handle_http_error)
@@ -53,6 +41,11 @@ def create_app(storage=None) -> Flask:
 
 def svc():
     return current_app.extensions["booking_service"]
+
+
+@pages.errorhandler(ServiceUnavailableError)
+def service_unavailable(e: ServiceUnavailableError):
+    return render_template("unavailable.html", message=str(e)), 503
 
 
 @pages.app_template_filter("nights")

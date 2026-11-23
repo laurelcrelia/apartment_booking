@@ -6,6 +6,18 @@ Authors: Laurel Matt and Kleidi Gjeta
 
 Web app for managing apartments and bookings, with availability search and overlap prevention. It has web forms for every workflow, a REST API documented with OpenAPI, and a command-line interface. All three share the same data.
 
+The backend is being split into microservices (see [documentation/microservices-plan.md](documentation/microservices-plan.md)). Apartments already run as their own **apartments service** with their own database. The web app owns bookings, serves the UI and the public REST API, and calls the apartments service over HTTP for apartment changes. Every apartment change is also published as an event through RabbitMQ, and the booking side keeps a local copy (replica) of the apartments from those events. Booking rules (does the apartment exist, which apartments are free) read that copy, so they keep working while the apartments service is down:
+
+```
+browser / CLI ──► web (apartment_booking) ──HTTP──► apartments (apartments_service)
+                  bookings.db                        apartments.db + outbox
+                  └ apartments replica                     │
+                        ▲                                  ▼
+                  booking-consumer ◄── RabbitMQ ◄── apartments-relay
+```
+
+The copy can lag a moment behind: an apartment created a second ago may not show up in availability search yet (booking it works right away).
+
 ## Quick start (Docker)
 
 Requires Docker with Compose v2. No local Python needed. From a fresh checkout:
@@ -13,7 +25,10 @@ Requires Docker with Compose v2. No local Python needed. From a fresh checkout:
 ```sh
 git clone https://github.com/laurelcrelia/apartment_booking.git
 cd apartment_booking
+printf 'RABBITMQ_PASSWORD=%s\n' "$(openssl rand -hex 24)" > .env   # once: creates your local secrets
 ```
+
+Compose won't start without `.env`; see [Secrets](#secrets).
 
 | Task | Command |
 |---|---|
@@ -21,12 +36,63 @@ cd apartment_booking
 | Open the app | <http://localhost:8000> |
 | Stop the app (data is kept) | `docker compose down` |
 | Run the tests | `docker compose --profile test run --rm --build tests` |
-| View server logs | `docker compose logs -f web` |
+| View server logs | `docker compose logs -f web apartments` (Ctrl+C to stop following) |
 | Delete all data | `docker compose down -v` |
 
-`--wait` returns once the app passes its health check (`/api/health`). The app listens only on `127.0.0.1`, so it can't be reached from other machines.
+Compose starts five containers:
 
-Data is stored in the `booking-data` Docker volume as `/data/data.json`. It survives `docker compose down` and image rebuilds; only `docker compose down -v` deletes it.
+| Container | What it does |
+|---|---|
+| `web` | web UI, public REST API, bookings |
+| `apartments` | apartments service (internal only) |
+| `apartments-relay` | publishes the apartments service's events to RabbitMQ |
+| `booking-consumer` | updates the booking side's apartments replica from those events |
+| `rabbitmq` | message broker; management UI on <http://localhost:15672> (log in with `RABBITMQ_USER`, default `booking`, and your `RABBITMQ_PASSWORD` from `.env`) |
+
+`--wait` returns once everything is up and healthy. `apartments-relay` and `booking-consumer` count as healthy only while they are connected to RabbitMQ and working: each writes a heartbeat file, and its health check (`python -m common.health`) fails if the heartbeat is older than 30 seconds. Only `web` and the RabbitMQ UI are published, on `127.0.0.1`, so they can't be reached from other machines. If `apartments` is down, the API answers `503 service_unavailable` for apartment pages and changes, while bookings (including creating them) and availability search keep working from the replica.
+
+Each service has its own volume and SQLite database: bookings in `booking-data` (`/data/bookings.db`) and apartments in `apartments-data` (`/data/apartments.db`); RabbitMQ keeps its queues in `rabbitmq-data`. They survive `docker compose down` and image rebuilds; only `docker compose down -v` deletes them.
+
+After an upgrade, apartments that existed before events did are announced once automatically when `apartments-relay` first starts, so the replica learns about them.
+
+### Secrets
+
+The only secret is the RabbitMQ login. It is never stored in the repository: Compose reads it from a `.env` file next to `compose.yaml` (or from environment variables), and refuses to start if `RABBITMQ_PASSWORD` is missing. `.env` is git-ignored and excluded from the Docker build context, so it can't end up in a commit or an image. `.env.example` lists the settings:
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `RABBITMQ_PASSWORD` | (required) | RabbitMQ password; letters and digits only, since it goes into an `amqp://` URL |
+| `RABBITMQ_USER` | `booking` | RabbitMQ user name |
+
+The relay and consumer get the login as `RABBITMQ_URL`, which Compose builds from these. CI generates a new random password for every run, so the pipelines need no stored secret.
+
+RabbitMQ only applies the login when its `rabbitmq-data` volume is first created. To change the password later, change it in RabbitMQ too, then restart the services that connect:
+
+```sh
+docker compose exec rabbitmq rabbitmqctl change_password booking 'NEW_PASSWORD'
+# put NEW_PASSWORD into .env, then:
+docker compose up -d
+```
+
+**Upgrading from a version with the built-in `booking`/`booking` login:** either keep that password (`RABBITMQ_PASSWORD=booking` in `.env`) or change it as above.
+
+**Upgrading from the JSON version** (everything in `/data/data.json`): start the new version once so both volumes exist, then copy the data in, keeping all IDs:
+
+```sh
+docker compose up -d --build --wait
+docker compose run --rm --no-deps -v apartments-data:/apartments --entrypoint python booking \
+  -m apartment_booking.migrate /data/data.json --apartments-db /apartments/apartments.db
+```
+
+**Upgrading from the first SQLite version** (`apartments.db` still in `booking-data`): move it to the apartments service's volume:
+
+```sh
+docker compose up -d --build --wait
+docker compose stop apartments
+docker compose run --rm --no-deps -v booking-data:/old --entrypoint sh apartments \
+  -c 'rm -f /data/apartments.db*; cp /old/apartments.db /data/'
+docker compose start apartments
+```
 
 ## Using the web app
 
@@ -138,13 +204,43 @@ python3 booking.py --help                           # CLI
 python3 -m unittest -v                              # tests
 ```
 
-Without Docker, data is stored in `./data.json`. Override it with the `APT_DATA_FILE` environment variable, or `--data PATH` for the CLI.
+Started like this, the web app serves apartments in-process from `./apartments.db` and keeps bookings in `./bookings.db`; events go straight from the apartments outbox to the replica, with no RabbitMQ needed. That is the simplest way to develop. To run the services separately, as in Docker, you also need RabbitMQ, the relay and the consumer:
+
+```sh
+docker compose up -d rabbitmq                                                    # or any RabbitMQ
+set -a; . ./.env; set +a                                                         # RABBITMQ_PASSWORD
+export RABBITMQ_URL=amqp://booking:$RABBITMQ_PASSWORD@localhost:5672/            # needs port 5672 published
+APARTMENTS_DB=apartments.db flask --app apartments_service.app run --port 8001   # apartments service
+APARTMENTS_DB=apartments.db python -m apartments_service.relay                   # relay
+python -m apartment_booking.consumer                                             # consumer
+APARTMENTS_URL=http://localhost:8001 flask --app apartment_booking.web run --port 8000
+```
+
+| Variable | Used by | Default | Meaning |
+|---|---|---|---|
+| `BOOKINGS_DB` | web, CLI | `bookings.db` | bookings database |
+| `APARTMENTS_URL` | web, CLI | unset | apartments service to call; if unset, apartments are served in-process |
+| `APARTMENTS_DB` | apartments service, relay, or web/CLI without `APARTMENTS_URL` | `apartments.db` | apartments database |
+| `RABBITMQ_URL` | relay, consumer | (required) | RabbitMQ to publish to or consume from, including the login |
+
+The CLI takes the same settings as `--bookings-db`, `--apartments-url` and `--apartments-db`. To import an old `data.json`, run `python3 -m apartment_booking.migrate data.json`.
 
 `scripts/smoke_test.py` runs every workflow against a running server and cleans up afterwards: `python3 scripts/smoke_test.py http://localhost:8000`.
 
+## HTTP API tests
+
+`api_tests/` is a black-box test suite for the REST API. It only sends HTTP requests, never imports the app's internals, creates its own data with unique names, and cleans up afterwards. That lets the same tests check the current app and, unchanged, the app after it is split into microservices (see [documentation/microservices-plan.md](documentation/microservices-plan.md)).
+
+```sh
+python -m unittest discover -s api_tests -v                                      # app started in-process on a free port
+API_BASE_URL=http://localhost:8000 python -m unittest discover -s api_tests -v   # a running app, e.g. docker compose
+```
+
+Like `e2e/`, the folder has no `__init__.py`, so the plain unit test run doesn't include it.
+
 ## Browser tests (Playwright)
 
-`e2e/` holds end-to-end tests that drive the web UI in Chromium with [Playwright](https://playwright.dev/python/). They start the app on a free local port with fresh in-memory data for every test, so they never touch your `data.json`. They need Python 3.10+.
+`e2e/` holds end-to-end tests that drive the web UI in Chromium with [Playwright](https://playwright.dev/python/). They start the app on a free local port with fresh in-memory data for every test, so they never touch your databases. They need Python 3.10+.
 
 ```sh
 pip install -r requirements-e2e.txt
@@ -159,21 +255,40 @@ HEADED=1 python -m unittest discover -s e2e  # watch them in a browser window
 ## Project layout
 
 ```
-apartment_booking/
-  service.py      business rules (shared by web app and CLI)
-  storage.py      JSON file storage
+apartment_booking/  web app: UI, public REST API, bookings
+  service.py      booking rules (shared by web app and CLI)
+  repos.py        SQLite repository for bookings
+  apartments_client.py  HTTP client for the apartments service
+  consumer.py     applies apartment events to the replica (process: booking-consumer)
+  inprocess.py    apartments service and event delivery inside this process
+  migrate.py      one-off import of the old data.json
   api.py          REST API under /api
   openapi.yaml    API specification
   web.py          Flask app factory and HTML pages
   templates/      page templates
   static/         CSS and the JavaScript that sends forms to the API
   cli.py          command-line interface
+apartments_service/  apartments service: internal JSON API for apartments
+  app.py          Flask app (/api/apartments, /api/health)
+  service.py      apartment rules
+  repo.py         SQLite repository for apartments, with the event outbox
+  relay.py        publishes outbox events (process: apartments-relay)
+common/           shared by both services
+  events.py       event format
+  rabbitmq.py     publishing, consuming, reconnecting (pika)
+  health.py       heartbeat health checks for the background workers
+  db.py           SQLite connections and transactions
+  http.py         JSON errors and request parsing
+  errors.py       errors shown to the user
 tests/            unit tests (service, API, pages, OpenAPI spec)
+api_tests/        black-box HTTP tests for the REST API
 e2e/              browser tests (Playwright, Chromium)
 scripts/          end-to-end smoke test
 ```
 
-The server runs as a single gunicorn worker with four threads. Requests are serialized with a lock so concurrent writes to the JSON file can't overwrite each other. Don't increase the worker count without moving to a real database.
+Apartments and bookings are kept in separate SQLite databases owned by separate services. Each write runs in its own transaction, and booking writes take the database's write lock before checking for overlaps, so two requests can never double-book an apartment. That makes it safe to run several gunicorn workers (the Docker image uses two, with four threads each).
+
+A plan to split apartments into their own microservice (SQLite per service, HTTP plus RabbitMQ events) is described, with architecture diagrams, in [documentation/microservices-plan.md](documentation/microservices-plan.md).
 
 ## CI
 
@@ -181,8 +296,9 @@ GitHub Actions (`.github/workflows/ci.yml`) runs on every push to `main` and on 
 
 - **Docker tests**: builds the test image for each Python version from 3.9 to 3.13 and runs the unit tests inside it.
 - **Code coverage**: measures coverage with [coverage.py](https://coverage.readthedocs.io/) and fails if it drops below 90%. The report is shown in the run summary and uploaded as the `coverage-html` artifact.
+- **HTTP API tests**: runs `api_tests/` against the app started in-process.
 - **Browser tests**: installs Playwright and Chromium and runs the `e2e/` tests against the web UI.
-- **Docker Compose end-to-end**: starts the app with Compose, runs `scripts/smoke_test.py`, restarts it to check that data persists, and runs the CLI and the tests through Compose.
+- **Docker Compose end-to-end**: starts the app with Compose, runs `scripts/smoke_test.py` and the `api_tests/` suite against it, restarts it to check that data persists, checks that an apartment change made while the consumer is stopped reaches the booking side once it is back, stops the apartments service to check for `503` while bookings keep working, and runs the CLI and the tests through Compose.
 
 To build for a specific Python version locally:
 

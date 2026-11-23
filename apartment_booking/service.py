@@ -2,29 +2,30 @@
 
 Date ranges are half-open: [check_in, check_out). A booking checking out on
 the same day another checks in does not overlap with it.
+
+BookingService owns bookings. It reaches apartments through an object with
+get/list/add/update/delete: either the apartments service in the same process
+(inprocess.LocalApartments), or HttpApartments, which calls it over HTTP.
+
+The booking rules (does the apartment exist, which apartments are free) read
+the local apartments replica, which events keep up to date, so they keep
+working while the apartments service is down. The replica may lag behind by a
+moment; see documentation/microservices-plan.md.
 """
 from __future__ import annotations
 
 from datetime import date
 
+from common.errors import (BookingError, ConflictError, NotFoundError, OverlapError,
+                           ServiceUnavailableError)
+
+from .repos import BookingRepo
+
+__all__ = ["ACTIVE", "CANCELLED", "BookingError", "BookingService", "ConflictError",
+           "NotFoundError", "OverlapError", "ServiceUnavailableError", "open_service", "parse_date"]
+
 ACTIVE = "active"
 CANCELLED = "cancelled"
-
-
-class BookingError(Exception):
-    """Raised for any invalid operation; the message is shown to the user."""
-
-
-class NotFoundError(BookingError):
-    pass
-
-
-class ConflictError(BookingError):
-    """The request is valid but clashes with the current state of the data."""
-
-
-class OverlapError(ConflictError):
-    pass
 
 
 def parse_date(value: str) -> date:
@@ -39,71 +40,36 @@ def _validate_range(check_in: date, check_out: date) -> None:
         raise BookingError("Check-out date must be after check-in date")
 
 
-def _overlaps(a_in: date, a_out: date, b_in: date, b_out: date) -> bool:
-    return a_in < b_out and b_in < a_out
-
-
 class BookingService:
-    def __init__(self, storage):
-        self.storage = storage
+    def __init__(self, bookings: BookingRepo, apartments):
+        self.bookings = bookings
+        self.apartments = apartments
 
     # ---------- apartments ----------
 
     def add_apartment(self, name: str, address: str, rooms: int = 1, price: float = 0.0) -> dict:
-        name = (name or "").strip()
-        if not name:
-            raise BookingError("Apartment name is required")
-        if rooms < 1:
-            raise BookingError("Rooms must be at least 1")
-        if price < 0:
-            raise BookingError("Price cannot be negative")
-        state = self.storage.load()
-        apt_id = state["next_apartment_id"]
-        apt = {"id": apt_id, "name": name, "address": address or "", "rooms": rooms, "price": price}
-        state["apartments"][str(apt_id)] = apt
-        state["next_apartment_id"] = apt_id + 1
-        self.storage.save(state)
-        return apt
+        return self.apartments.add(name, address, rooms, price)
 
     def get_apartment(self, apt_id: int) -> dict:
-        state = self.storage.load()
-        return self._apartment(state, apt_id)
+        return self.apartments.get(apt_id)
 
     def list_apartments(self) -> list[dict]:
-        state = self.storage.load()
-        return sorted(state["apartments"].values(), key=lambda a: a["id"])
+        return self.apartments.list()
 
     def update_apartment(self, apt_id: int, name=None, address=None, rooms=None, price=None) -> dict:
-        state = self.storage.load()
-        apt = self._apartment(state, apt_id)
-        if name is not None:
-            if not name.strip():
-                raise BookingError("Apartment name cannot be empty")
-            apt["name"] = name.strip()
-        if address is not None:
-            apt["address"] = address
-        if rooms is not None:
-            if rooms < 1:
-                raise BookingError("Rooms must be at least 1")
-            apt["rooms"] = rooms
-        if price is not None:
-            if price < 0:
-                raise BookingError("Price cannot be negative")
-            apt["price"] = price
-        self.storage.save(state)
-        return apt
+        return self.apartments.update(apt_id, name, address, rooms, price)
 
     def remove_apartment(self, apt_id: int) -> dict:
-        state = self.storage.load()
-        apt = self._apartment(state, apt_id)
-        active = [b for b in state["bookings"].values()
-                  if b["apartment_id"] == apt_id and b["status"] == ACTIVE]
+        # Check, then delete: the two live in different databases, so this can't
+        # be one transaction. Accepted; see documentation/microservices-plan.md.
+        apt = self.apartments.get(apt_id)
+        with self.bookings.reading() as table:
+            active = table.list(apt_id=apt_id)
         if active:
             ids = ", ".join(str(b["id"]) for b in active)
             raise ConflictError(
                 f"Apartment {apt_id} has active bookings ({ids}); cancel them first")
-        del state["apartments"][str(apt_id)]
-        self.storage.save(state)
+        self.apartments.delete(apt_id)
         return apt
 
     # ---------- bookings ----------
@@ -112,106 +78,111 @@ class BookingService:
         guest = (guest or "").strip()
         d_in, d_out = parse_date(check_in), parse_date(check_out)
         _validate_range(d_in, d_out)
-        state = self.storage.load()
-        self._apartment(state, apt_id)
-        self._ensure_no_overlap(state, apt_id, d_in, d_out)
-        b_id = state["next_booking_id"]
-        booking = {
-            "id": b_id,
-            "apartment_id": apt_id,
-            "guest": guest,
-            "check_in": d_in.isoformat(),
-            "check_out": d_out.isoformat(),
-            "status": ACTIVE,
-        }
-        state["bookings"][str(b_id)] = booking
-        state["next_booking_id"] = b_id + 1
-        self.storage.save(state)
-        return booking
+        self._require_apartment(apt_id)
+        with self.bookings.writing() as table:
+            self._ensure_no_overlap(table, apt_id, d_in, d_out)
+            return table.insert(apt_id, guest, d_in.isoformat(), d_out.isoformat(), ACTIVE)
 
     def get_booking(self, booking_id: int) -> dict:
-        state = self.storage.load()
-        return self._booking(state, booking_id)
+        with self.bookings.reading() as table:
+            return self._booking(table, booking_id)
 
     def list_bookings(self, apt_id=None, guest=None, include_cancelled=False) -> list[dict]:
-        state = self.storage.load()
-        result = []
-        for b in state["bookings"].values():
-            if apt_id is not None and b["apartment_id"] != apt_id:
-                continue
-            if guest is not None and b["guest"].lower() != guest.lower():
-                continue
-            if not include_cancelled and b["status"] != ACTIVE:
-                continue
-            result.append(b)
-        return sorted(result, key=lambda b: (b["check_in"], b["id"]))
+        with self.bookings.reading() as table:
+            result = table.list(apt_id=apt_id, include_cancelled=include_cancelled)
+        if guest is not None:
+            result = [b for b in result if b["guest"].lower() == guest.lower()]
+        return result
 
     def change_booking(self, booking_id: int, apt_id=None, guest=None,
                        check_in=None, check_out=None) -> dict:
-        state = self.storage.load()
-        booking = self._booking(state, booking_id)
-        if booking["status"] != ACTIVE:
-            raise ConflictError(f"Booking {booking_id} is cancelled and cannot be changed")
-        new_apt = booking["apartment_id"] if apt_id is None else apt_id
-        d_in = parse_date(check_in if check_in is not None else booking["check_in"])
-        d_out = parse_date(check_out if check_out is not None else booking["check_out"])
-        _validate_range(d_in, d_out)
-        self._apartment(state, new_apt)
-        self._ensure_no_overlap(state, new_apt, d_in, d_out, ignore_id=booking_id)
-        if guest is not None:
-            booking["guest"] = guest.strip()
-        booking.update(apartment_id=new_apt, check_in=d_in.isoformat(), check_out=d_out.isoformat())
-        self.storage.save(state)
-        return booking
+        if apt_id is not None:
+            # Outside the transaction: it may call the apartments service.
+            self._require_apartment(apt_id)
+        with self.bookings.writing() as table:
+            booking = self._booking(table, booking_id)
+            if booking["status"] != ACTIVE:
+                raise ConflictError(f"Booking {booking_id} is cancelled and cannot be changed")
+            new_apt = booking["apartment_id"] if apt_id is None else apt_id
+            d_in = parse_date(check_in if check_in is not None else booking["check_in"])
+            d_out = parse_date(check_out if check_out is not None else booking["check_out"])
+            _validate_range(d_in, d_out)
+            self._ensure_no_overlap(table, new_apt, d_in, d_out, ignore_id=booking_id)
+            changes = {"apartment_id": new_apt, "check_in": d_in.isoformat(), "check_out": d_out.isoformat()}
+            if guest is not None:
+                changes["guest"] = guest.strip()
+            return table.update(booking_id, **changes)
 
     def cancel_booking(self, booking_id: int) -> dict:
-        state = self.storage.load()
-        booking = self._booking(state, booking_id)
-        if booking["status"] == CANCELLED:
-            raise ConflictError(f"Booking {booking_id} is already cancelled")
-        booking["status"] = CANCELLED
-        self.storage.save(state)
-        return booking
+        with self.bookings.writing() as table:
+            booking = self._booking(table, booking_id)
+            if booking["status"] == CANCELLED:
+                raise ConflictError(f"Booking {booking_id} is already cancelled")
+            return table.update(booking_id, status=CANCELLED)
 
     # ---------- search ----------
 
     def search_available(self, check_in: str, check_out: str, min_rooms: int = 1) -> list[dict]:
         d_in, d_out = parse_date(check_in), parse_date(check_out)
         _validate_range(d_in, d_out)
-        state = self.storage.load()
-        busy = {
-            b["apartment_id"] for b in state["bookings"].values()
-            if b["status"] == ACTIVE and _overlaps(
-                d_in, d_out, parse_date(b["check_in"]), parse_date(b["check_out"]))
-        }
-        return sorted(
-            (a for a in state["apartments"].values()
-             if a["id"] not in busy and a["rooms"] >= min_rooms),
-            key=lambda a: a["id"],
-        )
+        with self.bookings.reading() as table:
+            return table.available_apartments(d_in.isoformat(), d_out.isoformat(), min_rooms)
 
     # ---------- helpers ----------
 
-    @staticmethod
-    def _apartment(state: dict, apt_id: int) -> dict:
-        try:
-            return state["apartments"][str(apt_id)]
-        except KeyError:
-            raise NotFoundError(f"Apartment {apt_id} not found") from None
+    def _require_apartment(self, apt_id: int) -> None:
+        """Raise NotFoundError unless the apartment exists, preferring the replica.
+
+        An apartment the replica hasn't heard of yet (created a moment ago) is
+        fetched from the apartments service and added to the replica; its
+        events will then bring it up to date.
+        """
+        with self.bookings.reading() as table:
+            known = table.replica_get(apt_id)
+        if known is not None:
+            if known["deleted"]:
+                raise NotFoundError(f"Apartment {apt_id} not found")
+            return
+        apt = self.apartments.get(apt_id)
+        with self.bookings.writing() as table:
+            table.replica_put(apt, version=0, only_if_missing=True)
 
     @staticmethod
-    def _booking(state: dict, booking_id: int) -> dict:
-        try:
-            return state["bookings"][str(booking_id)]
-        except KeyError:
-            raise NotFoundError(f"Booking {booking_id} not found") from None
+    def _booking(table, booking_id: int) -> dict:
+        booking = table.get(booking_id)
+        if booking is None:
+            raise NotFoundError(f"Booking {booking_id} not found")
+        return booking
 
     @staticmethod
-    def _ensure_no_overlap(state, apt_id, d_in, d_out, ignore_id=None) -> None:
-        for b in state["bookings"].values():
-            if b["id"] == ignore_id or b["apartment_id"] != apt_id or b["status"] != ACTIVE:
-                continue
-            if _overlaps(d_in, d_out, parse_date(b["check_in"]), parse_date(b["check_out"])):
-                raise OverlapError(
-                    f"Apartment {apt_id} is already booked from {b['check_in']} "
-                    f"to {b['check_out']} (booking {b['id']})")
+    def _ensure_no_overlap(table, apt_id, d_in, d_out, ignore_id=None) -> None:
+        b = table.first_overlap(apt_id, d_in.isoformat(), d_out.isoformat(), ignore_id)
+        if b is not None:
+            raise OverlapError(
+                f"Apartment {apt_id} is already booked from {b['check_in']} "
+                f"to {b['check_out']} (booking {b['id']})")
+
+
+def open_service(apartments_db: str = ":memory:", bookings_db: str = ":memory:",
+                 apartments_url: str | None = None) -> BookingService:
+    """Build the booking service on its SQLite database.
+
+    With apartments_url, apartments come from the apartments service over HTTP.
+    and the replica is fed by the booking consumer (consumer.py) from RabbitMQ.
+    Without it, the apartments service runs in this process on apartments_db
+    and delivers its events directly, which keeps tests and a plain
+    `flask run` down to one process. The defaults keep everything in memory.
+    """
+    bookings = BookingRepo(bookings_db)
+    if apartments_url:
+        from .apartments_client import HttpApartments
+        apartments = HttpApartments(apartments_url)
+    else:
+        from apartments_service.relay import Relay
+        from apartments_service.repo import ApartmentRepo
+        from apartments_service.service import ApartmentService
+
+        from .inprocess import LocalApartments, LocalPublisher
+        repo = ApartmentRepo(apartments_db)
+        apartments = LocalApartments(ApartmentService(repo), Relay(repo.outbox, LocalPublisher(bookings)))
+    return BookingService(bookings, apartments)
