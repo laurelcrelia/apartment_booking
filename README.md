@@ -18,7 +18,7 @@ browser ──► nginx ──► web (apartment_booking) ──HTTP──► ap
                        booking events out, apartment events in (and the reverse)
 ```
 
-NGINX is the gateway and the only way in from outside. It routes `/api/apartments` to the apartments service and everything else (bookings, pages, the rest of the API) to `web`; [documentation/gateway-plan.md](documentation/gateway-plan.md) describes the next steps.
+NGINX is the gateway and the only way in from outside. It serves the **frontend**, plain HTML pages in `frontend/` whose JavaScript loads and changes all data through the REST API, routes `/api/apartments` to the apartments service and the rest of `/api` (bookings, health, the spec) to `web`; [documentation/gateway-plan.md](documentation/gateway-plan.md) describes the next steps.
 
 The copy can lag a moment behind: an apartment created a second ago may not show up in availability search yet (booking it works right away).
 
@@ -47,8 +47,8 @@ Compose starts six containers:
 
 | Container | What it does |
 |---|---|
-| `nginx` | gateway: the only published port; routes `/api/apartments` to `apartments`, the rest to `web` |
-| `web` | web UI and the booking service (`/api/bookings`) |
+| `nginx` | gateway: the only published port; serves the frontend, routes `/api/apartments` to `apartments` and the rest of `/api` to `web` |
+| `web` | the booking service (`/api/bookings`) |
 | `apartments` | apartments service (`/api/apartments`, including availability search) |
 | `apartments-worker` | publishes the apartments service's events, and updates its bookings replica from booking events |
 | `bookings-worker` | publishes the booking service's events, and updates its apartments replica from apartment events |
@@ -238,7 +238,7 @@ Like `e2e/`, the folder has no `__init__.py`, so the plain unit test run doesn't
 
 ## Browser tests (Playwright)
 
-`e2e/` holds end-to-end tests that drive the web UI in Chromium with [Playwright](https://playwright.dev/python/). They start the app on a free local port with fresh in-memory data for every test, so they never touch your databases. They need Python 3.10+.
+`e2e/` holds end-to-end tests that drive the frontend in Chromium with [Playwright](https://playwright.dev/python/). They serve the frontend and both services on a free local port through the Python stand-in gateway, with fresh in-memory data for every test, so they never touch your databases. They need Python 3.10+.
 
 ```sh
 pip install -r requirements-e2e.txt
@@ -264,9 +264,7 @@ apartment_booking/  web app: UI, public REST API, bookings
   migrate.py      one-off import of the old data.json
   api.py          REST API under /api
   openapi.yaml    API specification
-  web.py          Flask app factory and HTML pages
-  templates/      page templates
-  static/         CSS and the JavaScript that sends forms to the API
+  web.py          Flask app factory (API only)
   cli.py          command-line interface
 apartments_service/  apartments service: internal JSON API for apartments
   app.py          Flask app (/api/apartments, /api/health)
@@ -287,7 +285,11 @@ common/           shared by both services
   errors.py       errors shown to the user
   client.py       base for the HTTP clients between services
   dates.py        date parsing and ranges
-tests/            unit tests (service, API, pages, OpenAPI spec)
+frontend/         static pages served by the gateway: one HTML file per page
+  static/app.js   shared code: loading data from the API, forms, formatting
+  static/pages/   one script per page, filling it with data from the API
+  static/style.css
+tests/            unit tests (services, API, frontend routing, OpenAPI spec)
 api_tests/        black-box HTTP tests for the REST API
 e2e/              browser tests (Playwright, Chromium)
 scripts/          end-to-end smoke test
@@ -305,7 +307,7 @@ GitHub Actions (`.github/workflows/ci.yml`) runs on every push to `main` and on 
 - **Docker tests**: builds the test image for each Python version from 3.9 to 3.13 and runs the unit tests inside it.
 - **Code coverage**: measures coverage with [coverage.py](https://coverage.readthedocs.io/) and fails if it drops below 90%. The report is shown in the run summary and uploaded as the `coverage-html` artifact.
 - **HTTP API tests**: runs `api_tests/` against the app started in-process.
-- **Browser tests**: installs Playwright and Chromium and runs the `e2e/` tests against the web UI.
+- **Browser tests**: installs Playwright and Chromium and runs the `e2e/` tests against the frontend.
 - **Docker Compose end-to-end**: starts the app with Compose, runs `scripts/smoke_test.py` and the `api_tests/` suite against it, restarts it to check that data persists, checks that an apartment change made while the bookings worker is stopped reaches the booking side once it is back, that booking events reach the apartments service, stops the apartments service to check for `503` while bookings keep working, checks that only the gateway is published and that with `web` stopped apartments keep working while bookings and deletes answer JSON `503`, and runs the CLI and the tests through Compose.
 
 To build for a specific Python version locally:

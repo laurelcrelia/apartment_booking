@@ -160,11 +160,6 @@ class ApartmentsDownTests(unittest.TestCase):
         r = self.client.get("/api/bookings")
         self.assertEqual((r.status_code, r.json), (200, []))
 
-    def test_pages_answer_503(self):
-        r = self.client.get("/")
-        self.assertEqual(r.status_code, 503)
-        self.assertIn(b"The apartments service is unavailable", r.data)
-
 
 class BookingsDownTests(unittest.TestCase):
     """The apartments service while the booking service is unreachable."""

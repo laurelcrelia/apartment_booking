@@ -65,8 +65,11 @@ call("DELETE", f"/api/apartments/{loft['id']}", expect=409)
 
 # Pages and static files
 for page in ("/", "/bookings", f"/apartments/{loft['id']}", f"/bookings/{booking['id']}",
-             "/api/docs", "/api/openapi.yaml", "/static/app.js", "/static/style.css"):
+             "/api/docs", "/api/openapi.yaml", "/static/app.js", "/static/style.css",
+             "/static/pages/apartments.js", "/static/pages/apartment.js",
+             "/static/pages/bookings.js", "/static/pages/booking.js"):
     call("GET", page)
+call("GET", "/no-such-page", expect=404)
 
 # Clean up: cancelling frees the apartment so it can be removed
 call("PATCH", f"/api/bookings/{booking['id']}", {"status": "cancelled"})

@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Apartment · Apartment Booking</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap">
+  <link rel="stylesheet" href="/static/style.css">
+  <script src="/static/app.js" defer></script>
+  <script src="/static/pages/apartment.js" defer></script>
+</head>
+<body>
+  <header class="topbar">
+    <nav>
+      <a class="brand" href="/"><span class="brand-mark" aria-hidden="true">AB</span><span class="brand-text">Apartment Booking</span></a>
+      <a href="/" aria-current="page">Apartments</a>
+      <a href="/bookings">Bookings</a>
+      <a href="/api/docs">API docs <span class="tag">v1</span></a>
+    </nav>
+  </header>
+  <noscript><p class="notice error">This app needs JavaScript.</p></noscript>
+  <main class="loading">
+    <nav class="crumbs" aria-label="Breadcrumb">
+      <a href="/">Apartments</a><span>/</span><span data-field="name"></span>
+    </nav>
+
+    <div class="card hero">
+      <div>
+        <div class="title-row">
+          <h1 data-field="name"></h1>
+          <small id="apartment-id"></small>
+        </div>
+        <p class="address" id="apartment-address"></p>
+        <div class="chips">
+          <span class="chip"><span class="dot accent"></span><span id="apartment-rooms"></span></span>
+          <span class="chip"><span class="dot teal"></span><span id="apartment-rate"></span></span>
+        </div>
+      </div>
+      <div class="stats">
+        <div class="stat"><span class="label">Bookings</span><span class="value" id="stat-bookings"></span><span class="sub">including cancelled</span></div>
+        <div class="stat"><span class="label">Active</span><span class="value" id="stat-active"></span><span class="sub" id="stat-nights"></span></div>
+        <div class="stat"><span class="label">Est. value</span><span class="value" id="stat-value"></span><span class="sub">active, at current rate</span></div>
+      </div>
+    </div>
+
+    <div class="split">
+      <div class="stack">
+        <section class="card flush">
+          <div class="card-head">
+            <div>
+              <h2>Bookings for this apartment</h2>
+              <p>Active and cancelled stays</p>
+            </div>
+            <span class="count" id="booking-count"></span>
+          </div>
+          <div id="booking-list"></div>
+        </section>
+
+        <section class="card">
+          <div class="card-head">
+            <div>
+              <h2>Edit apartment</h2>
+              <p>Update the name, address, room count or nightly rate</p>
+            </div>
+          </div>
+          <form id="edit-form" data-method="PATCH" data-flash="Apartment updated">
+            <div class="row">
+              <div class="field"><label for="edit-name">Name</label><input id="edit-name" name="name" required></div>
+              <div class="field"><label for="edit-address">Address</label><input id="edit-address" name="address"></div>
+              <div class="field"><label for="edit-rooms">Rooms</label><input id="edit-rooms" type="number" name="rooms" min="1" step="1" data-type="int"></div>
+              <div class="field">
+                <label for="edit-price">Price per night</label>
+                <div class="prefix"><span>€</span><input id="edit-price" type="number" name="price" min="0" step="0.01" data-type="number"></div>
+              </div>
+            </div>
+            <p class="notice error form-error" role="alert" hidden></p>
+            <div class="actions"><button type="submit">Save changes</button></div>
+          </form>
+        </section>
+
+        <section class="card danger-zone">
+          <div class="card-head"><h2>Remove apartment</h2></div>
+          <form id="remove-form" data-method="DELETE" data-redirect="/" data-flash="Apartment removed">
+            <p class="hint">Permanently remove <strong data-field="name"></strong>. Apartments with active bookings can't be removed.</p>
+            <p class="notice error" id="active-notice" hidden></p>
+            <p class="notice error form-error" role="alert" hidden></p>
+            <div class="actions start"><button type="submit" class="danger">Remove apartment</button></div>
+          </form>
+        </section>
+      </div>
+
+      <div class="stack sticky">
+        <section class="card">
+          <div class="card-head">
+            <div>
+              <span class="eyebrow">New booking</span>
+              <h2>Book this apartment</h2>
+            </div>
+          </div>
+          <form id="book-form" data-api="/api/bookings" data-method="POST" data-redirect="/bookings/{id}" data-flash="Booking created" data-nights>
+            <input type="hidden" name="apartment_id" data-type="int">
+            <div class="field">
+              <label for="book-guest">Guest name <span class="optional">Optional</span></label>
+              <input id="book-guest" name="guest" placeholder="e.g. Maria Rossi">
+            </div>
+            <div class="row">
+              <div class="field"><label for="book-in">Check-in</label><input id="book-in" type="date" name="check_in" required></div>
+              <div class="field"><label for="book-out">Check-out</label><input id="book-out" type="date" name="check_out" required></div>
+            </div>
+            <dl class="summary" data-summary>
+          <div><dt>Stay</dt><dd data-nights-label>Pick check-in and check-out</dd></div>
+          <div><dt>Nightly rate</dt><dd data-rate>–</dd></div>
+          <div class="total"><dt>Estimated total</dt><dd data-total>–</dd></div>
+        </dl>
+            <p class="notice error form-error" role="alert" hidden></p>
+            <button type="submit" class="block">Create booking</button>
+          </form>
+        </section>
+      </div>
+    </div>
+  </main>
+  <footer><p>Apartment Booking · Continuous Integration and Delivery course project, unibz</p></footer>
+
+  <div id="flash" class="toast" role="status" aria-live="polite" hidden>
+    <div><strong>Done</strong><span data-message></span></div>
+    <button type="button" aria-label="Dismiss" data-dismiss>×</button>
+  </div>
+
+  <dialog id="confirm-dialog" aria-labelledby="confirm-title">
+    <form method="dialog">
+      <h2 id="confirm-title">Are you sure?</h2>
+      <p data-message></p>
+      <div class="actions">
+        <button value="cancel" class="secondary">Keep it</button>
+        <button value="ok" class="danger solid" data-ok>Confirm</button>
+      </div>
+    </form>
+  </dialog>
+</body>
+</html>
