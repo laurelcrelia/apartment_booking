@@ -1,6 +1,6 @@
 # Plan: NGINX gateway, static frontend and two equal services
 
-Status: **in progress**: steps 1–2 done. Follows [microservices-plan.md](microservices-plan.md), which split apartments into their own service.
+Status: **in progress**: steps 1–3 done. Follows [microservices-plan.md](microservices-plan.md), which split apartments into their own service.
 
 ## Why
 
@@ -164,7 +164,7 @@ The HTTP API tests (`api_tests/`) must pass **unchanged** after every step: in C
    - bookings get a `version`, an outbox and a relay
    - the apartments side gets a bookings replica and a consumer
    - relay and consumer are merged into one worker per service
-3. **Apartments service owns search and the delete check:**
+3. **Apartments service owns search and the delete check** (done):
    - NGINX routes `/api/apartments` straight to it
    - the booking service drops its apartment routes
 4. **Static frontend:**

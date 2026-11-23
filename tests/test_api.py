@@ -6,12 +6,20 @@ from unittest import mock
 from flask import request
 
 from apartment_booking.service import open_service
+from werkzeug.test import Client
+
+from apartment_booking.local import create_local_app
 from apartment_booking.web import create_app
+
+
+def gateway_client(service=None) -> Client:
+    """The public API as the gateway serves it: both services, routed by path."""
+    return Client(create_local_app(service if service is not None else open_service()))
 
 
 class ApiTestCase(unittest.TestCase):
     def setUp(self):
-        self.client = create_app(open_service()).test_client()
+        self.client = gateway_client()
 
     def add_apartment(self, **fields):
         body = {"name": "Loft", "address": "1 Beach Rd", **fields}
@@ -261,12 +269,12 @@ class PersistenceTests(unittest.TestCase):
     def test_data_survives_app_restart(self):
         with tempfile.TemporaryDirectory() as tmp:
             dbs = os.path.join(tmp, "apartments.db"), os.path.join(tmp, "bookings.db")
-            client = create_app(open_service(*dbs)).test_client()
+            client = gateway_client(open_service(*dbs))
             client.post("/api/apartments", json={"name": "Loft", "address": "x"})
             client.post("/api/bookings", json={
                 "apartment_id": 1, "check_in": "2026-11-01", "check_out": "2026-11-05"})
 
-            restarted = create_app(open_service(*dbs)).test_client()
+            restarted = gateway_client(open_service(*dbs))
             self.assertEqual(restarted.get("/api/apartments/1").json["name"], "Loft")
             self.assertEqual(restarted.get("/api/bookings/1").json["status"], "active")
 
@@ -275,10 +283,25 @@ class PersistenceTests(unittest.TestCase):
             env = {"APARTMENTS_DB": os.path.join(tmp, "a", "apts.db"),
                    "BOOKINGS_DB": os.path.join(tmp, "b", "books.db")}
             with mock.patch.dict(os.environ, env):
-                create_app().test_client().post(
+                Client(create_local_app()).post(
                     "/api/apartments", json={"name": "Loft", "address": "x"})
             for path in env.values():
                 self.assertTrue(os.path.exists(path), path)
+
+
+class LocalGatewayTests(unittest.TestCase):
+    def test_web_app_alone_builds_its_service_from_the_environment(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            env = {"APARTMENTS_DB": os.path.join(tmp, "a.db"), "BOOKINGS_DB": os.path.join(tmp, "b.db")}
+            with mock.patch.dict(os.environ, env):
+                client = create_app().test_client()
+            self.assertEqual(client.get("/api/bookings").status_code, 200)
+            # /api/apartments belongs to the apartments service, behind the gateway.
+            self.assertEqual(client.get("/api/apartments").status_code, 404)
+
+    def test_needs_an_in_process_service(self):
+        with self.assertRaisesRegex(ValueError, "in-process"):
+            create_local_app(open_service(apartments_url="http://apartments"))
 
 
 class ProxyTests(unittest.TestCase):

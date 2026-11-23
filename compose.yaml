@@ -24,12 +24,15 @@ services:
       retries: 5
       start_period: 20s
 
-  # Apartments service: internal only (no published port), with its own database.
+  # Apartments service: /api/apartments, reached through nginx; own database.
   apartments:
     build: .
     image: apartment-booking
     command: ["gunicorn", "--bind", "0.0.0.0:8000", "--workers", "2", "--threads", "4",
               "--access-logfile", "-", "apartments_service.app:create_app()"]
+    environment:
+      BOOKINGS_URL: http://web:8000  # delete check: asks for active bookings
+      TRUSTED_PROXIES: "1"           # nginx
     volumes:
       - apartments-data:/data
     restart: unless-stopped
@@ -88,7 +91,7 @@ services:
       retries: 3
       start_period: 30s
 
-  # Gateway: the only way in from outside. Passes requests to `web` for now.
+  # Gateway: the only way in from outside. /api/apartments -> apartments, the rest -> web.
   nginx:
     image: nginx:1.27-alpine
     ports:
@@ -106,8 +109,8 @@ services:
       retries: 3
       start_period: 5s
 
-  # Web UI, public REST API and bookings; calls the apartments service over HTTP.
-  # Internal only: reached through nginx.
+  # Web UI and bookings (/api/bookings, pages); calls the apartments service over
+  # HTTP. Internal only: reached through nginx.
   web:
     build: .
     image: apartment-booking

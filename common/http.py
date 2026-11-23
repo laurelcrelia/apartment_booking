@@ -5,8 +5,11 @@ Every service answers errors in the same shape:
 """
 from __future__ import annotations
 
+import os
+
 from flask import jsonify, request, url_for
 from werkzeug.exceptions import HTTPException
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 from .errors import BookingError, ConflictError, NotFoundError, ServiceUnavailableError
 
@@ -41,6 +44,18 @@ def register_error_handlers(blueprint) -> None:
     """Turn ApiError and the service errors into JSON responses."""
     blueprint.register_error_handler(ApiError, _api_error)
     blueprint.register_error_handler(BookingError, _booking_error)
+
+
+def trust_proxies(app) -> None:
+    """Trust X-Forwarded-* from $TRUSTED_PROXIES reverse proxies (default 0).
+
+    Then the app sees the real client instead of the proxy. Only set it when
+    the app is reachable solely through those proxies, or clients could fake
+    their address.
+    """
+    count = int(os.environ.get("TRUSTED_PROXIES", "0"))
+    if count:
+        app.wsgi_app = ProxyFix(app.wsgi_app, x_for=count, x_proto=count, x_host=count)
 
 
 def handle_http_error(e: HTTPException):

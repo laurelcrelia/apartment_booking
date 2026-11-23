@@ -1,22 +1,29 @@
-"""The booking app talking to a real apartments service over HTTP."""
+"""The two services talking to each other over HTTP, as deployed."""
 import os
 import tempfile
 import threading
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
+from functools import partial
 from io import StringIO
 
 from flask import Flask
 from werkzeug.serving import WSGIRequestHandler, make_server
+from werkzeug.test import Client
 
 from apartment_booking.apartments_client import HttpApartments
 from apartment_booking.cli import main
+from apartment_booking.inprocess import LocalPublisher
+from apartment_booking.local import LocalGateway
 from apartment_booking.service import open_service
 from apartment_booking.web import create_app
 from apartments_service.app import create_app as create_apartments_app
+from apartments_service.bookings_client import HttpBookings
+from apartments_service.consumer import handle_booking_event
 from apartments_service.repo import ApartmentRepo
 from apartments_service.service import ApartmentService
 from common.errors import BookingError, ConflictError, NotFoundError, ServiceUnavailableError
+from common.relay import Relay
 
 
 class QuietHandler(WSGIRequestHandler):
@@ -42,8 +49,23 @@ def closed_port_url() -> str:
 
 
 class SplitTestCase(unittest.TestCase):
+    """Both services on their own ports, each calling the other over HTTP, plus
+    the stand-in gateway over them for the public API."""
+
     def setUp(self):
-        self.apartments_url = serve(self, create_apartments_app(ApartmentService(ApartmentRepo(":memory:"))))
+        web = {}  # the web app needs the apartments URL, and the other way round
+        self.web_url = serve(self, lambda environ, start: web["app"](environ, start))
+        self.apartments_repo = ApartmentRepo(":memory:")
+        apartments_app = create_apartments_app(ApartmentService(self.apartments_repo, HttpBookings(self.web_url)))
+        self.apartments_url = serve(self, apartments_app)
+        self.service = open_service(apartments_url=self.apartments_url)
+        web["app"] = create_app(self.service)
+        self.client = Client(LocalGateway(web["app"], apartments_app))
+
+    def deliver_booking_events(self):
+        """What the booking worker does through RabbitMQ in Docker."""
+        Relay(self.service.bookings.outbox,
+              LocalPublisher(partial(handle_booking_event, self.apartments_repo))).publish_pending()
 
 
 class HttpApartmentsTests(SplitTestCase):
@@ -90,11 +112,7 @@ class HttpApartmentsTests(SplitTestCase):
 
 
 class GatewayTests(SplitTestCase):
-    """The public API and pages of the booking app, with apartments served remotely."""
-
-    def setUp(self):
-        super().setUp()
-        self.client = create_app(open_service(apartments_url=self.apartments_url)).test_client()
+    """The public API through the gateway, with the services calling each other over HTTP."""
 
     def test_workflow_across_services(self):
         r = self.client.post("/api/apartments", json={"name": "Loft", "address": "x", "rooms": 2})
@@ -103,10 +121,13 @@ class GatewayTests(SplitTestCase):
         r = self.client.post("/api/bookings", json={"apartment_id": 1, "check_in": "2026-11-01",
                                                     "check_out": "2026-11-05"})
         self.assertEqual(r.status_code, 201, r.json)
-        r = self.client.get("/api/apartments?from=2026-11-02&to=2026-11-03")
-        self.assertEqual(r.json, [])
+        # The delete check asks the booking service over HTTP: strict right away.
         r = self.client.delete("/api/apartments/1")
         self.assertEqual((r.status_code, r.json["error"]["code"]), (409, "conflict"))
+        # Search reads the apartments service's replica, once the event arrives.
+        self.assertEqual([a["id"] for a in self.client.get("/api/apartments?from=2026-11-02&to=2026-11-03").json], [1])
+        self.deliver_booking_events()
+        self.assertEqual(self.client.get("/api/apartments?from=2026-11-02&to=2026-11-03").json, [])
         self.client.patch("/api/bookings/1", json={"status": "cancelled"})
         self.assertEqual(self.client.delete("/api/apartments/1").status_code, 204)
         with self.assertRaises(NotFoundError):
@@ -122,20 +143,18 @@ class GatewayTests(SplitTestCase):
 
 
 class ApartmentsDownTests(unittest.TestCase):
+    """The booking service while the apartments service is unreachable.
+
+    (/api/apartments itself then gets its 503 from the gateway.)"""
+
     def setUp(self):
         self.client = create_app(open_service(apartments_url=closed_port_url())).test_client()
 
-    def test_api_answers_503(self):
-        for method, path, body in [
-            ("get", "/api/apartments", None),
-            ("get", "/api/apartments/1", None),
-            ("post", "/api/apartments", {"name": "Loft", "address": "x"}),
-            ("post", "/api/bookings", {"apartment_id": 1, "check_in": "2026-11-01", "check_out": "2026-11-05"}),
-        ]:
-            with self.subTest(path=path, method=method):
-                r = getattr(self.client, method)(path, json=body)
-                self.assertEqual(r.status_code, 503, r.json)
-                self.assertEqual(r.json["error"]["code"], "service_unavailable")
+    def test_booking_an_unknown_apartment_answers_503(self):
+        r = self.client.post("/api/bookings", json={"apartment_id": 1, "check_in": "2026-11-01",
+                                                    "check_out": "2026-11-05"})
+        self.assertEqual(r.status_code, 503, r.json)
+        self.assertEqual(r.json["error"]["code"], "service_unavailable")
 
     def test_bookings_without_apartments_still_work(self):
         r = self.client.get("/api/bookings")
@@ -145,6 +164,25 @@ class ApartmentsDownTests(unittest.TestCase):
         r = self.client.get("/")
         self.assertEqual(r.status_code, 503)
         self.assertIn(b"The apartments service is unavailable", r.data)
+
+
+class BookingsDownTests(unittest.TestCase):
+    """The apartments service while the booking service is unreachable."""
+
+    def setUp(self):
+        service = ApartmentService(ApartmentRepo(":memory:"), HttpBookings(closed_port_url()))
+        self.client = create_apartments_app(service).test_client()
+        self.client.post("/api/apartments", json={"name": "Loft", "address": "x"})
+
+    def test_delete_answers_503_and_keeps_the_apartment(self):
+        r = self.client.delete("/api/apartments/1")
+        self.assertEqual((r.status_code, r.json["error"]["code"]), (503, "service_unavailable"))
+        self.assertIn("booking service is unavailable", r.json["error"]["message"])
+        self.assertEqual(self.client.get("/api/apartments/1").status_code, 200)
+
+    def test_reads_and_search_keep_working(self):
+        self.assertEqual(len(self.client.get("/api/apartments").json), 1)
+        self.assertEqual(len(self.client.get("/api/apartments?from=2026-11-01&to=2026-11-02").json), 1)
 
 
 class CliTests(SplitTestCase):

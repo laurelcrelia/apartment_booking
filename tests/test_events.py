@@ -8,7 +8,7 @@ from contextlib import closing
 from functools import partial
 
 from apartment_booking.consumer import handle_event, on_message
-from apartment_booking.inprocess import LocalPublisher
+from apartment_booking.inprocess import LocalBookings, LocalPublisher
 from apartment_booking.repos import BookingRepo
 from apartment_booking.service import BookingService, open_service
 from apartments_service.repo import ApartmentRepo, enqueue_snapshot
@@ -171,8 +171,8 @@ class ReplicaInBookingRulesTests(unittest.TestCase):
 
     def setUp(self):
         self.apartments_repo = ApartmentRepo(":memory:")
-        self.apartments = ApartmentService(self.apartments_repo)
         self.bookings = BookingRepo(":memory:")
+        self.apartments = ApartmentService(self.apartments_repo, LocalBookings(self.bookings))
         self.svc = BookingService(self.bookings, self.apartments)
         self.relay = Relay(self.apartments_repo.outbox, LocalPublisher(partial(handle_event, self.bookings)))
 

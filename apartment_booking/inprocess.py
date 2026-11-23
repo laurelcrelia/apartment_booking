@@ -21,6 +21,17 @@ class LocalPublisher:
         self.handler(decode(encode(event)))
 
 
+class LocalBookings:
+    """The booking repository, as the apartments service's link for the delete check."""
+
+    def __init__(self, bookings):
+        self.bookings = bookings
+
+    def active_bookings(self, apt_id: int) -> list[dict]:
+        with self.bookings.reading() as table:
+            return table.list(apt_id=apt_id)
+
+
 class LocalApartments:
     """The in-process ApartmentService, delivering its events after every change."""
 

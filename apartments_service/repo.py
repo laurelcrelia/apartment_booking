@@ -109,6 +109,18 @@ class ApartmentRepo:
             rows = conn.execute(f"SELECT {APARTMENT_COLUMNS} FROM apartments ORDER BY id")
             return [dict(r) for r in rows]
 
+    def available(self, check_in: str, check_out: str, min_rooms: int) -> list[dict]:
+        """Apartments with no active booking (in the bookings replica) that
+        overlaps [check_in, check_out)."""
+        with self.db.transaction() as conn:
+            rows = conn.execute(
+                f"SELECT {APARTMENT_COLUMNS} FROM apartments"
+                " WHERE rooms >= ? AND id NOT IN ("
+                "   SELECT apartment_id FROM bookings_replica"
+                "   WHERE status = 'active' AND check_in < ? AND ? < check_out)"
+                " ORDER BY id", (min_rooms, check_out, check_in))
+            return [dict(r) for r in rows]
+
     def update(self, apt_id: int, **fields) -> dict | None:
         """Change the given columns; returns the updated row, or None if it doesn't exist."""
         if not fields:
