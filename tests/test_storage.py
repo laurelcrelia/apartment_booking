@@ -57,6 +57,33 @@ class ApartmentRepoTests(TempDirTestCase):
 
 
 class TransactionTests(TempDirTestCase):
+    def test_apartment_writes_survive_another_process_writing_meanwhile(self):
+        # Regression: delete used to read, then write, without the write lock.
+        # When the relay (another process) committed in between, SQLite failed
+        # the delete at once with "database is locked".
+        repo = ApartmentRepo(self.apartments_db)
+        repo.add("Loft", "x", 1, 0)
+        relay = sqlite3.connect(self.apartments_db, timeout=0.05, isolation_level=None)
+        self.addCleanup(relay.close)
+        read_versioned = repo._get_versioned
+        relay_results = []
+
+        def read_then_let_the_relay_write(conn, apt_id):
+            result = read_versioned(conn, apt_id)
+            try:
+                relay.execute("UPDATE outbox SET published_at = 'now'")
+                relay_results.append("wrote")
+            except sqlite3.OperationalError:
+                relay_results.append("blocked")
+            return result
+
+        repo._get_versioned = read_then_let_the_relay_write
+        self.assertEqual(repo.update(1, price=10)["price"], 10)
+        self.assertTrue(repo.delete(1))
+        repo.add("Studio", "x", 1, 0)
+        # The relay had to wait every time, because each write held the lock.
+        self.assertEqual(relay_results, ["blocked"] * 3)
+
     def test_writing_holds_the_write_lock(self):
         repo = BookingRepo(self.bookings_db)
         other = sqlite3.connect(self.bookings_db, timeout=0.05, isolation_level=None)

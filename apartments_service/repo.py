@@ -79,7 +79,7 @@ class Outbox:
             return [(r["id"], json.loads(r["payload"])) for r in rows]
 
     def mark_published(self, row_id: int) -> None:
-        with self.db.transaction() as conn:
+        with self.db.transaction(immediate=True) as conn:
             conn.execute("UPDATE outbox SET published_at = ? WHERE id = ?", (_now(), row_id))
 
     def snapshot_once(self) -> int:
@@ -101,8 +101,11 @@ class ApartmentRepo:
                 conn.execute("INSERT OR IGNORE INTO outbox_state (key, value)"
                              " VALUES ('snapshot', 'not needed: no apartments yet')")
 
+    # Every transaction that writes is immediate: the relay writes to the same
+    # database from another process, see Database.transaction.
+
     def add(self, name: str, address: str, rooms: int, price: float) -> dict:
-        with self.db.transaction() as conn:
+        with self.db.transaction(immediate=True) as conn:
             cur = conn.execute("INSERT INTO apartments (name, address, rooms, price) VALUES (?, ?, ?, ?)",
                                (name, address, rooms, price))
             apt, version = self._get_versioned(conn, cur.lastrowid)
@@ -120,9 +123,9 @@ class ApartmentRepo:
 
     def update(self, apt_id: int, **fields) -> dict | None:
         """Change the given columns; returns the updated row, or None if it doesn't exist."""
-        with self.db.transaction() as conn:
-            if not fields:
-                return self._get(conn, apt_id)
+        if not fields:
+            return self.get(apt_id)
+        with self.db.transaction(immediate=True) as conn:
             assignments = ", ".join(f"{column} = ?" for column in fields)
             conn.execute(f"UPDATE apartments SET {assignments}, version = version + 1 WHERE id = ?",
                          (*fields.values(), apt_id))
@@ -132,7 +135,7 @@ class ApartmentRepo:
             return apt
 
     def delete(self, apt_id: int) -> bool:
-        with self.db.transaction() as conn:
+        with self.db.transaction(immediate=True) as conn:
             apt, version = self._get_versioned(conn, apt_id)
             if apt is None:
                 return False
