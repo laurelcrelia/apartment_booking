@@ -61,7 +61,7 @@ class ReadApartmentTests(ApiTestCase):
 
     def test_get_unknown_is_404(self):
         a = self.add_apartment()
-        self.delete(f"/api/apartments/{a['id']}")
+        self.assertEqual(self.delete(f"/api/apartments/{a['id']}").status, 204)
         self.assertError(self.get(f"/api/apartments/{a['id']}"), 404, "not_found", f"Apartment {a['id']}")
 
     def test_list_contains_created_in_id_order(self):
@@ -122,7 +122,7 @@ class UpdateApartmentTests(ApiTestCase):
 
     def test_patch_unknown_is_404(self):
         a = self.add_apartment()
-        self.delete(f"/api/apartments/{a['id']}")
+        self.assertEqual(self.delete(f"/api/apartments/{a['id']}").status, 204)
         self.assertError(self.patch(f"/api/apartments/{a['id']}", {"price": 1}), 404, "not_found")
 
 
@@ -136,7 +136,7 @@ class DeleteApartmentTests(ApiTestCase):
 
     def test_delete_unknown_is_404(self):
         a = self.add_apartment()
-        self.delete(f"/api/apartments/{a['id']}")
+        self.assertEqual(self.delete(f"/api/apartments/{a['id']}").status, 204)
         self.assertError(self.delete(f"/api/apartments/{a['id']}"), 404, "not_found")
 
     def test_delete_with_active_booking_is_409(self):

@@ -54,9 +54,12 @@ class Database:
     def transaction(self, immediate: bool = False):
         """Run a block in one transaction; it commits on success and rolls back on error.
 
-        immediate=True takes the write lock up front, so a check followed by a
-        write (like "no overlapping booking, then insert") can't interleave
-        with another writer.
+        Use immediate=True for every transaction that writes. It takes the
+        write lock up front, so a check followed by a write (like "no
+        overlapping booking, then insert") can't interleave with another
+        writer. Without it, a transaction that reads and then writes fails at
+        once with "database is locked" if another connection committed in
+        between (WAL mode doesn't wait in that case).
         """
         with self._lock:
             conn = self._conn if self._memory else self._connect()

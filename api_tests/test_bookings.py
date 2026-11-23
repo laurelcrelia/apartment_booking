@@ -43,7 +43,7 @@ class CreateBookingTests(ApiTestCase):
 
     def test_unknown_apartment_is_404(self):
         gone = self.add_apartment()
-        self.delete(f"/api/apartments/{gone['id']}")
+        self.assertEqual(self.delete(f"/api/apartments/{gone['id']}").status, 204)
         eventually(lambda: self.assertError(self.book(gone["id"], day(1, 1), day(1, 5)),
                                             404, "not_found", f"Apartment {gone['id']}"))
 
@@ -143,7 +143,7 @@ class ChangeBookingTests(ApiTestCase):
                          400, "validation_error", "after check-in")
         self.assertError(self.patch(self.url(), {"check_in": "nope"}), 400, "validation_error", "Invalid date")
         gone = self.add_apartment()
-        self.delete(f"/api/apartments/{gone['id']}")
+        self.assertEqual(self.delete(f"/api/apartments/{gone['id']}").status, 204)
         eventually(lambda: self.assertError(self.patch(self.url(), {"apartment_id": gone["id"]}),
                                             404, "not_found"))
         self.assertEqual(self.get(self.url()).json, self.b)
