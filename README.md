@@ -144,6 +144,7 @@ Errors use one shape, for example:
 | 405 | `method_not_allowed` | The method isn't supported on that URL |
 | 409 | `conflict` | Overlapping booking, removing a booked apartment, changing a cancelled booking |
 | 415 | `unsupported_media_type` | A request body wasn't sent as `application/json` |
+| 503 | `service_unavailable` | The apartments service, which the request needs, can't be reached |
 
 Examples:
 
@@ -310,7 +311,9 @@ docker build --build-arg PYTHON_VERSION=3.9 -t apartment-booking:py3.9 .
 
 The project is mirrored to [gitlab.inf.unibz.it](https://gitlab.inf.unibz.it/LaurelCrelia.Matt/apartment_booking). `.gitlab-ci.yml` runs the same jobs as GitHub Actions on a self-hosted runner using the **shell executor**: jobs run directly on the runner machine and use its Docker, so no Docker-in-Docker is needed.
 
-Each job uses its own Compose project, data volume (`booking-data-ci-<job id>`) and port (`18000`), so CI never touches the app or data you run yourself on the same machine. Override them for your own use with `APP_PORT` and `BOOKING_VOLUME`.
+Each job uses its own Compose project, volumes (`booking-data-ci-<job id>`, `apartments-data-ci-<job id>`, `rabbitmq-data-ci-<job id>`) and ports (app `18000`, RabbitMQ UI `25672`), so CI never touches the app or data you run yourself on the same machine. The Compose job writes its own `.env` with a throwaway RabbitMQ password. Override these for your own use with `APP_PORT`, `RABBITMQ_UI_PORT`, `BOOKING_VOLUME`, `APARTMENTS_VOLUME` and `RABBITMQ_VOLUME`.
+
+The pipeline runs for merge requests, the default branch and manual runs (**Build → Pipelines → New pipeline**); plain pushes to other branches don't start it. GitHub Actions likewise runs only for pushes to `main` and for pull requests.
 
 Runner setup (macOS, once):
 
