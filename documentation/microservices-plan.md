@@ -1,6 +1,6 @@
 # Plan: extracting the Apartments microservice
 
-Status: **in progress**: steps 0–4 done. Work happens on the `microservices-apartments` branch, one commit per step.
+Status: **done**: all steps implemented on the `microservices-apartments` branch (pull request #1), one commit per step, with GitHub Actions green. The GitLab pipeline hasn't run the branch yet.
 
 ## Why
 
@@ -160,7 +160,7 @@ The envelope is `{event_id (uuid4), type, occurred_at, data}`. The routing key e
 2. **SQLite inside the monolith.** Separate `ApartmentRepo` and `BookingRepo`, a transactional overlap check, no more `SerializedService` (so more than one worker is allowed), and a `data.json` → SQLite migration command (`python -m apartment_booking.migrate`) that keeps IDs.
 3. **Extract `apartments_service`** with an HTTP client in the booking service, shared HTTP helpers in `common/`, and `503` on outage. Compose already runs it as its own `apartments` container with its own volume.
 4. **Events:** outbox, relay, RabbitMQ, consumer, replica. Compose already runs `rabbitmq`, `apartments-relay` and `booking-consumer`, and CI checks event delivery. Databases from before events are announced once by a snapshot when the relay first starts.
-5. **Containers and CI:** compose services and volumes, coverage over all packages, compose checks for event propagation and outage behaviour. Mostly done along the way in steps 3–4. Added in step 5: heartbeat health checks for `apartments-relay` and `booking-consumer`, so `docker compose up --wait` only returns once both are connected to RabbitMQ. What's left is a green pipeline: CI runs only for `main` and pull/merge requests, so the branch needs a PR/MR.
+5. **Containers and CI:** compose services and volumes, coverage over all packages, compose checks for event propagation and outage behaviour. Mostly done along the way in steps 3–4. Added in step 5: heartbeat health checks for `apartments-relay` and `booking-consumer`, so `docker compose up --wait` only returns once both are connected to RabbitMQ. The first full CI run (on pull request #1) passed, including the Compose checks for event delivery and the apartments-service outage.
 
 ## Verification (each step)
 
