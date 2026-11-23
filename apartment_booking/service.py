@@ -14,9 +14,9 @@ moment; see documentation/microservices-plan.md.
 """
 from __future__ import annotations
 
-from datetime import date
 from functools import partial
 
+from common.dates import parse_date, validate_range
 from common.errors import (BookingError, ConflictError, NotFoundError, OverlapError,
                            ServiceUnavailableError)
 
@@ -27,18 +27,6 @@ __all__ = ["ACTIVE", "CANCELLED", "BookingError", "BookingService", "ConflictErr
 
 ACTIVE = "active"
 CANCELLED = "cancelled"
-
-
-def parse_date(value: str) -> date:
-    try:
-        return date.fromisoformat(value)
-    except (TypeError, ValueError):
-        raise BookingError(f"Invalid date '{value}', expected YYYY-MM-DD") from None
-
-
-def _validate_range(check_in: date, check_out: date) -> None:
-    if check_out <= check_in:
-        raise BookingError("Check-out date must be after check-in date")
 
 
 class BookingService:
@@ -64,15 +52,8 @@ class BookingService:
         return self.apartments.update(apt_id, name, address, rooms, price)
 
     def remove_apartment(self, apt_id: int) -> dict:
-        # Check, then delete: the two live in different databases, so this can't
-        # be one transaction. Accepted; see documentation/microservices-plan.md.
+        # The apartments service refuses while the apartment has active bookings.
         apt = self.apartments.get(apt_id)
-        with self.bookings.reading() as table:
-            active = table.list(apt_id=apt_id)
-        if active:
-            ids = ", ".join(str(b["id"]) for b in active)
-            raise ConflictError(
-                f"Apartment {apt_id} has active bookings ({ids}); cancel them first")
         self.apartments.delete(apt_id)
         return apt
 
@@ -81,7 +62,7 @@ class BookingService:
     def create_booking(self, apt_id: int, guest: str, check_in: str, check_out: str) -> dict:
         guest = (guest or "").strip()
         d_in, d_out = parse_date(check_in), parse_date(check_out)
-        _validate_range(d_in, d_out)
+        validate_range(d_in, d_out)
         self._require_apartment(apt_id)
         with self.bookings.writing() as table:
             self._ensure_no_overlap(table, apt_id, d_in, d_out)
@@ -112,7 +93,7 @@ class BookingService:
             new_apt = booking["apartment_id"] if apt_id is None else apt_id
             d_in = parse_date(check_in if check_in is not None else booking["check_in"])
             d_out = parse_date(check_out if check_out is not None else booking["check_out"])
-            _validate_range(d_in, d_out)
+            validate_range(d_in, d_out)
             self._ensure_no_overlap(table, new_apt, d_in, d_out, ignore_id=booking_id)
             changes = {"apartment_id": new_apt, "check_in": d_in.isoformat(), "check_out": d_out.isoformat()}
             if guest is not None:
@@ -134,7 +115,7 @@ class BookingService:
 
     def search_available(self, check_in: str, check_out: str, min_rooms: int = 1) -> list[dict]:
         d_in, d_out = parse_date(check_in), parse_date(check_out)
-        _validate_range(d_in, d_out)
+        validate_range(d_in, d_out)
         with self.bookings.reading() as table:
             return table.available_apartments(d_in.isoformat(), d_out.isoformat(), min_rooms)
 
@@ -195,10 +176,11 @@ def open_service(apartments_db: str = ":memory:", bookings_db: str = ":memory:",
     from common.relay import Relay
 
     from .consumer import handle_event
-    from .inprocess import LocalApartments, LocalPublisher
+    from .inprocess import LocalApartments, LocalBookings, LocalPublisher
     repo = ApartmentRepo(apartments_db)
     apartment_events = Relay(repo.outbox, LocalPublisher(partial(handle_event, bookings)))
     booking_events = Relay(bookings.outbox, LocalPublisher(partial(handle_booking_event, repo)))
     booking_events.publish_pending()  # bookings that existed before events did
-    return BookingService(bookings, LocalApartments(ApartmentService(repo), apartment_events),
+    apartment_service = ApartmentService(repo, LocalBookings(bookings))
+    return BookingService(bookings, LocalApartments(apartment_service, apartment_events),
                           on_change=booking_events.publish_pending)

@@ -10,6 +10,7 @@ so you can check it is still there after a restart.
 """
 import json
 import sys
+import time
 import urllib.error
 import urllib.request
 
@@ -50,8 +51,14 @@ stay = {"check_in": "2099-11-01", "check_out": "2099-11-05"}
 booking = call("POST", "/api/bookings", {"apartment_id": loft["id"], "guest": "Ann", **stay}, expect=201)
 call("POST", "/api/bookings", {"apartment_id": loft["id"], "check_in": "2099-11-04",
                                "check_out": "2099-11-06"}, expect=409)
-free = call("GET", "/api/apartments?from=2099-11-02&to=2099-11-03")
-assert loft["id"] not in [a["id"] for a in free], "booked apartment shown as available"
+# Search learns about bookings through events, so give it a few seconds.
+for attempt in range(20):
+    free = call("GET", "/api/apartments?from=2099-11-02&to=2099-11-03")
+    if loft["id"] not in [a["id"] for a in free]:
+        break
+    time.sleep(0.5)
+else:
+    sys.exit("FAIL booked apartment still shown as available after 10 s")
 call("PATCH", f"/api/bookings/{booking['id']}", {"check_out": "2099-11-06", "guest": "Ann B"})
 call("GET", f"/api/bookings?apartment_id={loft['id']}")
 call("DELETE", f"/api/apartments/{loft['id']}", expect=409)

@@ -6,7 +6,11 @@ from openapi_spec_validator import validate
 
 from apartment_booking.api import SPEC_PATH
 from apartment_booking.service import open_service
+from werkzeug.test import Client
+
+from apartment_booking.local import create_local_app
 from apartment_booking.web import create_app
+from apartments_service.app import create_app as create_apartments_app
 
 # HTML pages under /api that are deliberately not part of the JSON API.
 UNDOCUMENTED = {"/api/docs"}
@@ -21,10 +25,12 @@ class OpenApiSpecTests(unittest.TestCase):
         validate(self.spec)
 
     def test_every_api_route_is_documented(self):
-        app = create_app(open_service())
+        # The public API is served by both services behind the gateway.
+        service = open_service()
+        apps = [create_app(service), create_apartments_app(service.apartments.service)]
         prefix = self.spec["servers"][0]["url"]
         routes = set()
-        for rule in app.url_map.iter_rules():
+        for rule in (rule for app in apps for rule in app.url_map.iter_rules()):
             if not rule.rule.startswith(prefix + "/") or rule.rule in UNDOCUMENTED:
                 continue
             path = re.sub(r"<(?:\w+:)?(\w+)>", r"{\1}", rule.rule[len(prefix):])
@@ -40,7 +46,7 @@ class OpenApiSpecTests(unittest.TestCase):
 
 class PageTests(unittest.TestCase):
     def setUp(self):
-        self.client = create_app(open_service()).test_client()
+        self.client = Client(create_local_app(open_service()))
         self.client.post("/api/apartments", json={"name": "Loft <b>", "address": "1 Beach Rd"})
         self.client.post("/api/bookings", json={
             "apartment_id": 1, "check_in": "2026-11-01", "check_out": "2026-11-05", "guest": "Ann"})

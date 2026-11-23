@@ -90,10 +90,8 @@ compose-e2e:
     - docker compose start bookings-worker
     - |
       for i in $(seq 30); do
-        curl -fsS "http://localhost:$APP_PORT/api/apartments?from=2099-12-01&to=2099-12-02&min_rooms=7" \
-          | python3 -c "import json, sys; sys.exit(not any(a['id'] == $ID for a in json.load(sys.stdin)))" \
-          && break
-        [ "$i" = 30 ] && { echo "apartment $ID never showed up in search"; exit 1; }
+        docker compose logs bookings-worker | grep -q "applied apartment.updated for apartment $ID " && break
+        [ "$i" = 30 ] && { echo "apartment $ID's change never reached the booking side"; exit 1; }
         sleep 1
       done
     # Booking events reach the apartments service through RabbitMQ.
@@ -112,15 +110,20 @@ compose-e2e:
     - "curl -fsS -X POST -H 'Content-Type: application/json' -d \"{\\\"apartment_id\\\": $ID, \\\"check_in\\\": \\\"2099-12-10\\\", \\\"check_out\\\": \\\"2099-12-11\\\"}\" http://localhost:$APP_PORT/api/bookings"
     - docker compose start apartments
     - docker compose up -d --wait
-    # Only the gateway is published; JSON 503 while the web app is down, and back afterwards.
+    # Gateway routes by path: only the gateway is published, and with the web app down only
+    # its parts fail (bookings, and deletes, which need the active-bookings check).
     # Compose prints ":0" for a port that isn't published, "host:port" otherwise.
     - if (docker compose port web 8000 2>/dev/null || true) | grep -q ':[1-9]'; then echo "web must not be published"; exit 1; fi
     - docker compose stop web
-    - test "$(curl -s --max-time 15 -o body.json -w '%{http_code}' http://localhost:$APP_PORT/api/apartments)" = 503
+    - curl -fsS --max-time 15 "http://localhost:$APP_PORT/api/apartments?from=2099-01-01&to=2099-01-02" > /dev/null
+    - test "$(curl -s --max-time 15 -o body.json -w '%{http_code}' http://localhost:$APP_PORT/api/bookings)" = 503
+    - grep -q '"service_unavailable"' body.json
+    - test "$(curl -s --max-time 15 -o body.json -w '%{http_code}' -X DELETE http://localhost:$APP_PORT/api/apartments/$ID)" = 503
     - grep -q '"service_unavailable"' body.json
     - docker compose start web
     - docker compose up -d --wait
-    - curl -fsS http://localhost:$APP_PORT/api/apartments > /dev/null
+    - curl -fsS http://localhost:$APP_PORT/api/bookings > /dev/null
+    - curl -fsS http://localhost:$APP_PORT/api/apartments/$ID > /dev/null
     - docker compose run --rm booking apartment view $ID
     - docker compose --profile test run --rm --build tests
   after_script:

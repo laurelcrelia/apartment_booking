@@ -16,8 +16,10 @@ info:
       listings unless `include_cancelled=true`.
     - Unknown fields in a request body are rejected with `400`.
     - Every error response has the same shape (see `Error`).
-    - Apartments are managed by a separate apartments service behind this API.
-      Requests that need it answer `503` while it is unreachable.
+    - Apartments and bookings are served by two services behind one gateway.
+      A request that needs a service which is unreachable answers `503`;
+      deleting an apartment also needs the booking service (to check for
+      active bookings).
 servers:
   - url: /api
 tags:
@@ -34,7 +36,9 @@ paths:
       description: |
         Without `from` and `to`, returns every apartment. With both, returns
         only apartments that have no active booking overlapping that stay.
-        `min_rooms` filters either way.
+        `min_rooms` filters either way. Search learns about bookings through
+        events, so a booking made a moment ago may not exclude its apartment
+        yet; overlapping bookings are still always rejected.
       parameters:
         - name: from
           in: query
@@ -447,15 +451,15 @@ components:
               message: Apartment 1 is already booked from 2026-11-01 to 2026-11-05 (booking 1)
     ServiceUnavailable:
       description: |
-        The apartments service, which this request depends on, could not be
-        reached. Try again later.
+        A service this request depends on (apartments or bookings) could not
+        be reached. Try again later.
       content:
         application/json:
           schema: {$ref: "#/components/schemas/Error"}
           example:
             error:
               code: service_unavailable
-              message: The apartments service is unavailable; try again later
+              message: The booking service is unavailable; try again later
     UnsupportedMediaType:
       description: The request body was not sent as `application/json`.
       content:

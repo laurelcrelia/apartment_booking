@@ -32,19 +32,22 @@ _base_url: str | None = None
 
 def start_local_server() -> str:
     """Start the apartments service and the booking web app on free ports,
-    talking to each other over HTTP like the deployed services, plus a thread
-    that delivers events between them a little later, in both directions, as
-    RabbitMQ would; returns the web app's URL."""
+    calling each other over HTTP like the deployed services, a stand-in for
+    the NGINX gateway in front of them, and a thread that delivers events
+    between them a little later, in both directions, as RabbitMQ would;
+    returns the gateway's URL."""
     from werkzeug.serving import WSGIRequestHandler, make_server
 
     from functools import partial
 
     from apartment_booking.consumer import handle_event
     from apartment_booking.inprocess import LocalPublisher
+    from apartment_booking.local import LocalGateway
     from apartment_booking.repos import BookingRepo
     from apartment_booking.service import open_service
     from apartment_booking.web import create_app
     from apartments_service.app import create_app as create_apartments_app
+    from apartments_service.bookings_client import HttpBookings
     from apartments_service.consumer import handle_booking_event
     from apartments_service.repo import ApartmentRepo
     from apartments_service.service import ApartmentService
@@ -64,8 +67,13 @@ def start_local_server() -> str:
     servers = []
     apartments_repo = ApartmentRepo(os.path.join(tmp.name, "apartments.db"))
     bookings_db = os.path.join(tmp.name, "bookings.db")
-    apartments_url = serve(create_apartments_app(ApartmentService(apartments_repo)))
-    web_url = serve(create_app(open_service(bookings_db=bookings_db, apartments_url=apartments_url)))
+    web = {}  # the web app needs the apartments URL, and the other way round
+    web_url = serve(lambda environ, start: web["app"](environ, start))
+    apartments_app = create_apartments_app(ApartmentService(apartments_repo, HttpBookings(web_url)))
+    apartments_url = serve(apartments_app)
+    web["app"] = create_app(open_service(bookings_db=bookings_db, apartments_url=apartments_url))
+    # The public entry point: routes by path like NGINX does.
+    gateway_url = serve(LocalGateway(web["app"], apartments_app))
 
     bookings_repo = BookingRepo(bookings_db)
     relays = [Relay(apartments_repo.outbox, LocalPublisher(partial(handle_event, bookings_repo))),
@@ -86,7 +94,7 @@ def start_local_server() -> str:
             server.shutdown()
         tmp.cleanup()
     atexit.register(stop)
-    return web_url
+    return gateway_url
 
 
 def base_url() -> str:

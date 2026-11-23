@@ -1,6 +1,6 @@
-"""Web application: HTML pages with forms, plus the REST API from api.py.
+"""Web application: HTML pages with forms, plus the booking service's REST API from api.py.
 
-Run locally:   flask --app apartment_booking.web run --port 8000
+Run locally:   python -m apartment_booking.local --port 8000   (with the apartments service)
 Run in Docker: docker compose up -d --build --wait
 """
 from __future__ import annotations
@@ -10,9 +10,8 @@ from datetime import date
 
 from flask import Blueprint, Flask, abort, current_app, render_template, request
 from werkzeug.exceptions import HTTPException
-from werkzeug.middleware.proxy_fix import ProxyFix
 
-from common.http import handle_http_error
+from common.http import handle_http_error, trust_proxies
 
 from .api import api
 from .service import BookingService, NotFoundError, ServiceUnavailableError, open_service
@@ -38,10 +37,7 @@ def create_app(service: BookingService | None = None) -> Flask:
                                os.environ.get("BOOKINGS_DB", "bookings.db"),
                                os.environ.get("APARTMENTS_URL"))
     app.extensions["booking_service"] = service
-    trusted_proxies = int(os.environ.get("TRUSTED_PROXIES", "0"))
-    if trusted_proxies:
-        app.wsgi_app = ProxyFix(app.wsgi_app, x_for=trusted_proxies, x_proto=trusted_proxies,
-                                x_host=trusted_proxies)
+    trust_proxies(app)
     app.register_blueprint(api)
     app.register_blueprint(pages)
     app.register_error_handler(HTTPException, handle_http_error)
