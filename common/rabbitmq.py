@@ -48,11 +48,12 @@ class PikaPublisher:
             self.connection.close()
 
 
-def consume(url: str, queue: str, binding: str, on_message) -> None:
+def consume(url: str, queue: str, binding: str, on_message, on_tick=None) -> None:
     """Consume a durable queue bound to EXCHANGE, calling on_message(body) per message.
 
     A message is acknowledged after on_message returns. If it raises, the
-    connection drops and the broker delivers the message again.
+    connection drops and the broker delivers the message again. on_tick() is
+    called every few seconds while the connection is healthy.
     """
     connection, channel = connect(url)
     try:
@@ -66,7 +67,10 @@ def consume(url: str, queue: str, binding: str, on_message) -> None:
 
         channel.basic_consume(queue, callback)
         log.info("consuming %s (%s on exchange %s)", queue, binding, EXCHANGE)
-        channel.start_consuming()
+        while True:
+            if on_tick:
+                on_tick()
+            connection.process_data_events(time_limit=5)  # delivers messages to callback
     finally:
         if connection.is_open:
             connection.close()

@@ -15,6 +15,7 @@ import os
 from .repo import ApartmentRepo, Outbox
 
 POLL_SECONDS = 0.5
+HEARTBEAT_FILE = "/tmp/apartments-relay.heartbeat"
 
 log = logging.getLogger("apartments_service.relay")
 
@@ -41,11 +42,13 @@ class Relay:
 
 
 def main() -> None:  # pragma: no cover - needs a broker; exercised by the Compose CI job
+    from common.health import beat
     from common.rabbitmq import PikaPublisher, run_forever
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
     outbox = ApartmentRepo(os.environ.get("APARTMENTS_DB", "apartments.db")).outbox
     url = os.environ["RABBITMQ_URL"]
+    heartbeat = os.environ.get("HEARTBEAT_FILE", HEARTBEAT_FILE)
 
     def work():
         from pika.exceptions import UnroutableError
@@ -55,6 +58,7 @@ def main() -> None:  # pragma: no cover - needs a broker; exercised by the Compo
         try:
             relay = Relay(outbox, publisher)
             while True:
+                beat(heartbeat)  # connected and polling: healthy
                 try:
                     count = relay.publish_pending()
                 except UnroutableError:

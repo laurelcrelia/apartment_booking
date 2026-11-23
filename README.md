@@ -49,7 +49,7 @@ Compose starts five containers:
 | `booking-consumer` | updates the booking side's apartments replica from those events |
 | `rabbitmq` | message broker; management UI on <http://localhost:15672> (log in with `RABBITMQ_USER`, default `booking`, and your `RABBITMQ_PASSWORD` from `.env`) |
 
-`--wait` returns once everything is up and healthy. Only `web` and the RabbitMQ UI are published, on `127.0.0.1`, so they can't be reached from other machines. If `apartments` is down, the API answers `503 service_unavailable` for apartment pages and changes, while bookings (including creating them) and availability search keep working from the replica.
+`--wait` returns once everything is up and healthy. `apartments-relay` and `booking-consumer` count as healthy only while they are connected to RabbitMQ and working: each writes a heartbeat file, and its health check (`python -m common.health`) fails if the heartbeat is older than 30 seconds. Only `web` and the RabbitMQ UI are published, on `127.0.0.1`, so they can't be reached from other machines. If `apartments` is down, the API answers `503 service_unavailable` for apartment pages and changes, while bookings (including creating them) and availability search keep working from the replica.
 
 Each service has its own volume and SQLite database: bookings in `booking-data` (`/data/bookings.db`) and apartments in `apartments-data` (`/data/apartments.db`); RabbitMQ keeps its queues in `rabbitmq-data`. They survive `docker compose down` and image rebuilds; only `docker compose down -v` deletes them.
 
@@ -276,6 +276,7 @@ apartments_service/  apartments service: internal JSON API for apartments
 common/           shared by both services
   events.py       event format
   rabbitmq.py     publishing, consuming, reconnecting (pika)
+  health.py       heartbeat health checks for the background workers
   db.py           SQLite connections and transactions
   http.py         JSON errors and request parsing
   errors.py       errors shown to the user

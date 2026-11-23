@@ -20,6 +20,7 @@ from .repos import BookingRepo
 
 QUEUE = "bookings.apartments"
 BINDING = "apartment.*"
+HEARTBEAT_FILE = "/tmp/booking-consumer.heartbeat"
 
 log = logging.getLogger("apartment_booking.consumer")
 
@@ -56,12 +57,15 @@ def on_message(repo: BookingRepo, body: bytes) -> None:
 
 
 def main() -> None:  # pragma: no cover - needs a broker; exercised by the Compose CI job
+    from common.health import beat
     from common.rabbitmq import consume, run_forever
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
     repo = BookingRepo(os.environ.get("BOOKINGS_DB", "bookings.db"))
     url = os.environ["RABBITMQ_URL"]
-    run_forever(lambda: consume(url, QUEUE, BINDING, partial(on_message, repo)), "consumer")
+    heartbeat = os.environ.get("HEARTBEAT_FILE", HEARTBEAT_FILE)
+    run_forever(lambda: consume(url, QUEUE, BINDING, partial(on_message, repo),
+                                on_tick=partial(beat, heartbeat)), "consumer")
 
 
 if __name__ == "__main__":  # pragma: no cover

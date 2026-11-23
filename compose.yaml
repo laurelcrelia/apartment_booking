@@ -55,6 +55,12 @@ services:
       rabbitmq:
         condition: service_healthy
     restart: unless-stopped
+    healthcheck:  # healthy while connected to RabbitMQ and polling the outbox
+      test: ["CMD", "python", "-m", "common.health", "/tmp/apartments-relay.heartbeat"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 30s
 
   # Keeps the apartments replica in bookings.db up to date from those events.
   booking-consumer:
@@ -69,6 +75,12 @@ services:
       rabbitmq:
         condition: service_healthy
     restart: unless-stopped
+    healthcheck:  # healthy while connected to RabbitMQ and consuming its queue
+      test: ["CMD", "python", "-m", "common.health", "/tmp/booking-consumer.heartbeat"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 30s
 
   # Web UI, public REST API and bookings; calls the apartments service over HTTP.
   web:
