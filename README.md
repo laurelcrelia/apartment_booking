@@ -289,7 +289,7 @@ scripts/          end-to-end smoke test
 
 Apartments and bookings are kept in separate SQLite databases owned by separate services. Each write runs in its own transaction, and booking writes take the database's write lock before checking for overlaps, so two requests can never double-book an apartment. That makes it safe to run several gunicorn workers (the Docker image uses two, with four threads each).
 
-A plan to split apartments into their own microservice (SQLite per service, HTTP plus RabbitMQ events) is described, with architecture diagrams, in [documentation/microservices-plan.md](documentation/microservices-plan.md).
+A plan to split apartments into their own microservice (SQLite per service, HTTP plus RabbitMQ events) is described, with architecture diagrams, in [documentation/microservices-plan.md](documentation/microservices-plan.md). The next stage, an NGINX gateway, a static frontend and pub/sub in both directions, is planned in [documentation/gateway-plan.md](documentation/gateway-plan.md).
 
 ## CI
 
