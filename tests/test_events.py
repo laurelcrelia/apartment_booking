@@ -5,15 +5,16 @@ import sqlite3
 import tempfile
 import unittest
 from contextlib import closing
+from functools import partial
 
 from apartment_booking.consumer import handle_event, on_message
 from apartment_booking.inprocess import LocalPublisher
 from apartment_booking.repos import BookingRepo
 from apartment_booking.service import BookingService, open_service
-from apartments_service.relay import Relay
 from apartments_service.repo import ApartmentRepo, enqueue_snapshot
 from apartments_service.service import ApartmentService
 from common.errors import NotFoundError, ServiceUnavailableError
+from common.relay import Relay
 from common.events import (APARTMENT_CREATED, APARTMENT_DELETED, APARTMENT_UPDATED, decode, encode,
                            new_event)
 
@@ -173,7 +174,7 @@ class ReplicaInBookingRulesTests(unittest.TestCase):
         self.apartments = ApartmentService(self.apartments_repo)
         self.bookings = BookingRepo(":memory:")
         self.svc = BookingService(self.bookings, self.apartments)
-        self.relay = Relay(self.apartments_repo.outbox, LocalPublisher(self.bookings))
+        self.relay = Relay(self.apartments_repo.outbox, LocalPublisher(partial(handle_event, self.bookings)))
 
     def search(self, **kw):
         return [a["id"] for a in self.svc.search_available("2026-11-01", "2026-11-02", **kw)]
@@ -246,7 +247,7 @@ class InProcessTests(unittest.TestCase):
             self.assertEqual(ApartmentRepo(os.path.join(tmp, "new.db")).outbox.snapshot_once(), 0)
 
     def test_local_publisher_rejects_non_json(self):
-        publisher = LocalPublisher(BookingRepo(":memory:"))
+        publisher = LocalPublisher(partial(handle_event, BookingRepo(":memory:")))
         with self.assertRaises(TypeError):
             publisher.publish({**apartment_event(APARTMENT_CREATED), "occurred_at": object()})
         json.dumps(apartment_event(APARTMENT_CREATED))  # the normal case serializes fine

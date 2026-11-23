@@ -15,6 +15,7 @@ moment; see documentation/microservices-plan.md.
 from __future__ import annotations
 
 from datetime import date
+from functools import partial
 
 from common.errors import (BookingError, ConflictError, NotFoundError, OverlapError,
                            ServiceUnavailableError)
@@ -41,9 +42,12 @@ def _validate_range(check_in: date, check_out: date) -> None:
 
 
 class BookingService:
-    def __init__(self, bookings: BookingRepo, apartments):
+    def __init__(self, bookings: BookingRepo, apartments, on_change=None):
         self.bookings = bookings
         self.apartments = apartments
+        # Called after every booking change; in-process mode delivers the
+        # change's event with it. Otherwise the booking worker publishes it.
+        self.on_change = on_change or (lambda: None)
 
     # ---------- apartments ----------
 
@@ -81,7 +85,9 @@ class BookingService:
         self._require_apartment(apt_id)
         with self.bookings.writing() as table:
             self._ensure_no_overlap(table, apt_id, d_in, d_out)
-            return table.insert(apt_id, guest, d_in.isoformat(), d_out.isoformat(), ACTIVE)
+            booking = table.insert(apt_id, guest, d_in.isoformat(), d_out.isoformat(), ACTIVE)
+        self.on_change()
+        return booking
 
     def get_booking(self, booking_id: int) -> dict:
         with self.bookings.reading() as table:
@@ -111,14 +117,18 @@ class BookingService:
             changes = {"apartment_id": new_apt, "check_in": d_in.isoformat(), "check_out": d_out.isoformat()}
             if guest is not None:
                 changes["guest"] = guest.strip()
-            return table.update(booking_id, **changes)
+            booking = table.update(booking_id, **changes)
+        self.on_change()
+        return booking
 
     def cancel_booking(self, booking_id: int) -> dict:
         with self.bookings.writing() as table:
             booking = self._booking(table, booking_id)
             if booking["status"] == CANCELLED:
                 raise ConflictError(f"Booking {booking_id} is already cancelled")
-            return table.update(booking_id, status=CANCELLED)
+            booking = table.update(booking_id, status=CANCELLED)
+        self.on_change()
+        return booking
 
     # ---------- search ----------
 
@@ -168,21 +178,27 @@ def open_service(apartments_db: str = ":memory:", bookings_db: str = ":memory:",
     """Build the booking service on its SQLite database.
 
     With apartments_url, apartments come from the apartments service over HTTP.
-    and the replica is fed by the booking consumer (consumer.py) from RabbitMQ.
+    and events travel through RabbitMQ (the workers, worker.py).
     Without it, the apartments service runs in this process on apartments_db
-    and delivers its events directly, which keeps tests and a plain
-    `flask run` down to one process. The defaults keep everything in memory.
+    and events are delivered directly in both directions, which keeps tests
+    and a plain `flask run` down to one process. The defaults keep everything
+    in memory.
     """
     bookings = BookingRepo(bookings_db)
     if apartments_url:
         from .apartments_client import HttpApartments
-        apartments = HttpApartments(apartments_url)
-    else:
-        from apartments_service.relay import Relay
-        from apartments_service.repo import ApartmentRepo
-        from apartments_service.service import ApartmentService
+        return BookingService(bookings, HttpApartments(apartments_url))
 
-        from .inprocess import LocalApartments, LocalPublisher
-        repo = ApartmentRepo(apartments_db)
-        apartments = LocalApartments(ApartmentService(repo), Relay(repo.outbox, LocalPublisher(bookings)))
-    return BookingService(bookings, apartments)
+    from apartments_service.consumer import handle_booking_event
+    from apartments_service.repo import ApartmentRepo
+    from apartments_service.service import ApartmentService
+    from common.relay import Relay
+
+    from .consumer import handle_event
+    from .inprocess import LocalApartments, LocalPublisher
+    repo = ApartmentRepo(apartments_db)
+    apartment_events = Relay(repo.outbox, LocalPublisher(partial(handle_event, bookings)))
+    booking_events = Relay(bookings.outbox, LocalPublisher(partial(handle_booking_event, repo)))
+    booking_events.publish_pending()  # bookings that existed before events did
+    return BookingService(bookings, LocalApartments(ApartmentService(repo), apartment_events),
+                          on_change=booking_events.publish_pending)

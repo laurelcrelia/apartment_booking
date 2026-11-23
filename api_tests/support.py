@@ -32,19 +32,23 @@ _base_url: str | None = None
 
 def start_local_server() -> str:
     """Start the apartments service and the booking web app on free ports,
-    talking to each other over HTTP like the deployed services, plus a relay
-    thread that delivers apartment events to the booking side a little later,
-    as RabbitMQ would; returns the web app's URL."""
+    talking to each other over HTTP like the deployed services, plus a thread
+    that delivers events between them a little later, in both directions, as
+    RabbitMQ would; returns the web app's URL."""
     from werkzeug.serving import WSGIRequestHandler, make_server
 
+    from functools import partial
+
+    from apartment_booking.consumer import handle_event
     from apartment_booking.inprocess import LocalPublisher
     from apartment_booking.repos import BookingRepo
     from apartment_booking.service import open_service
     from apartment_booking.web import create_app
     from apartments_service.app import create_app as create_apartments_app
-    from apartments_service.relay import Relay
+    from apartments_service.consumer import handle_booking_event
     from apartments_service.repo import ApartmentRepo
     from apartments_service.service import ApartmentService
+    from common.relay import Relay
 
     class QuietHandler(WSGIRequestHandler):
         def log_request(self, *args):
@@ -63,12 +67,15 @@ def start_local_server() -> str:
     apartments_url = serve(create_apartments_app(ApartmentService(apartments_repo)))
     web_url = serve(create_app(open_service(bookings_db=bookings_db, apartments_url=apartments_url)))
 
-    relay = Relay(apartments_repo.outbox, LocalPublisher(BookingRepo(bookings_db)))
+    bookings_repo = BookingRepo(bookings_db)
+    relays = [Relay(apartments_repo.outbox, LocalPublisher(partial(handle_event, bookings_repo))),
+              Relay(bookings_repo.outbox, LocalPublisher(partial(handle_booking_event, apartments_repo)))]
     stopping = threading.Event()
 
     def deliver_events():
         while not stopping.wait(0.2):
-            relay.publish_pending()
+            for relay in relays:
+                relay.publish_pending()
     relay_thread = threading.Thread(target=deliver_events, daemon=True)
     relay_thread.start()
 

@@ -13,21 +13,22 @@ import time
 import pika
 from pika.exceptions import AMQPError
 
-from .events import EXCHANGE, encode
+from .events import encode
 
 log = logging.getLogger(__name__)
 
 
-def connect(url: str):
+def connect(url: str, exchange: str):
     connection = pika.BlockingConnection(pika.URLParameters(url))
     channel = connection.channel()
-    channel.exchange_declare(EXCHANGE, exchange_type="topic", durable=True)
+    channel.exchange_declare(exchange, exchange_type="topic", durable=True)
     return connection, channel
 
 
 class PikaPublisher:
-    def __init__(self, url: str):
-        self.connection, self.channel = connect(url)
+    def __init__(self, url: str, exchange: str):
+        self.exchange = exchange
+        self.connection, self.channel = connect(url, exchange)
         self.channel.confirm_delivery()
 
     def publish(self, event: dict) -> None:
@@ -35,7 +36,7 @@ class PikaPublisher:
         # no queue is bound yet, pika raises UnroutableError instead of the
         # broker silently dropping the message, so the outbox row stays pending.
         self.channel.basic_publish(
-            EXCHANGE, event["type"], encode(event),
+            self.exchange, event["type"], encode(event),
             pika.BasicProperties(content_type="application/json", delivery_mode=2,
                                  message_id=event["event_id"]),
             mandatory=True)
@@ -48,17 +49,17 @@ class PikaPublisher:
             self.connection.close()
 
 
-def consume(url: str, queue: str, binding: str, on_message, on_tick=None) -> None:
-    """Consume a durable queue bound to EXCHANGE, calling on_message(body) per message.
+def consume(url: str, exchange: str, queue: str, binding: str, on_message, on_tick=None) -> None:
+    """Consume a durable queue bound to exchange, calling on_message(body) per message.
 
     A message is acknowledged after on_message returns. If it raises, the
     connection drops and the broker delivers the message again. on_tick() is
     called every few seconds while the connection is healthy.
     """
-    connection, channel = connect(url)
+    connection, channel = connect(url, exchange)
     try:
         channel.queue_declare(queue, durable=True)
-        channel.queue_bind(queue, EXCHANGE, routing_key=binding)
+        channel.queue_bind(queue, exchange, routing_key=binding)
         channel.basic_qos(prefetch_count=10)
 
         def callback(ch, method, properties, body):
@@ -66,7 +67,7 @@ def consume(url: str, queue: str, binding: str, on_message, on_tick=None) -> Non
             ch.basic_ack(method.delivery_tag)
 
         channel.basic_consume(queue, callback)
-        log.info("consuming %s (%s on exchange %s)", queue, binding, EXCHANGE)
+        log.info("consuming %s (%s on exchange %s)", queue, binding, exchange)
         while True:
             if on_tick:
                 on_tick()

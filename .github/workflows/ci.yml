@@ -143,17 +143,30 @@ jobs:
         env:
           ID: ${{ steps.smoke.outputs.KEPT_APARTMENT_ID }}
         run: |
-          docker compose stop booking-consumer   # events wait in the queue meanwhile
+          docker compose stop bookings-worker   # events wait in the queue meanwhile
           curl -fsS -X PATCH -H 'Content-Type: application/json' -d '{"rooms": 7}' \
             http://localhost:8000/api/apartments/$ID
-          docker compose start booking-consumer
+          docker compose start bookings-worker
           for i in $(seq 30); do
             curl -fsS 'http://localhost:8000/api/apartments?from=2099-12-01&to=2099-12-02&min_rooms=7' \
               | python3 -c "import json, sys; sys.exit(not any(a['id'] == $ID for a in json.load(sys.stdin)))" \
               && exit 0
             sleep 1
           done
-          echo "apartment $ID never showed up in search"; docker compose logs apartments-relay booking-consumer; exit 1
+          echo "apartment $ID never showed up in search"; docker compose logs apartments-worker bookings-worker; exit 1
+
+      - name: Booking events reach the apartments service through RabbitMQ
+        env:
+          ID: ${{ steps.smoke.outputs.KEPT_APARTMENT_ID }}
+        run: |
+          BID=$(curl -fsS -X POST -H 'Content-Type: application/json' \
+            -d "{\"apartment_id\": $ID, \"check_in\": \"2099-12-20\", \"check_out\": \"2099-12-21\"}" \
+            http://localhost:8000/api/bookings | python3 -c "import json, sys; print(json.load(sys.stdin)['id'])")
+          for i in $(seq 30); do
+            docker compose logs apartments-worker | grep -q "applied booking.created for booking $BID " && exit 0
+            sleep 1
+          done
+          echo "booking $BID never reached the apartments service"; docker compose logs apartments-worker bookings-worker; exit 1
 
       - name: Apartments service down gives 503, bookings keep working
         env:

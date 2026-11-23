@@ -4,7 +4,8 @@ Every event is a JSON envelope:
     {"event_id": "<uuid4>", "type": "apartment.updated",
      "occurred_at": "2026-11-18T10:00:00+00:00", "data": {...}}
 
-It is published to the topic exchange EXCHANGE with the type as routing key.
+Each service publishes to its own topic exchange (APARTMENTS_EXCHANGE,
+BOOKINGS_EXCHANGE) with the type as routing key.
 Delivery is at least once, so consumers must skip event_ids they have already
 processed, and must not let an older version overwrite a newer one.
 """
@@ -14,11 +15,18 @@ import json
 import uuid
 from datetime import datetime, timezone
 
-EXCHANGE = "apartments"
+APARTMENTS_EXCHANGE = "apartments"  # published by the apartments service
+BOOKINGS_EXCHANGE = "bookings"      # published by the booking service
 
 APARTMENT_CREATED = "apartment.created"  # data: apartment + version
 APARTMENT_UPDATED = "apartment.updated"  # data: apartment + version
 APARTMENT_DELETED = "apartment.deleted"  # data: {id, version}
+
+# data: {id, apartment_id, check_in, check_out, status, version}; no guest name,
+# since no other service needs it.
+BOOKING_CREATED = "booking.created"
+BOOKING_CHANGED = "booking.changed"
+BOOKING_CANCELLED = "booking.cancelled"
 
 
 def new_event(event_type: str, data: dict) -> dict:

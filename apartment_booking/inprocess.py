@@ -1,27 +1,24 @@
 """Running the apartments service inside the booking app's process.
 
 Used when APARTMENTS_URL is not set: tests, the Playwright suite and a plain
-`flask run`. Events still go through the apartments outbox and the same
-handler the booking consumer uses, but are delivered right away instead of
-through RabbitMQ, so the replica is always up to date.
+`flask run`. Events still go through each service's outbox and the same
+handlers the workers use, but are delivered right away in both directions
+instead of through RabbitMQ, so both replicas are always up to date.
 """
 from __future__ import annotations
 
 from common.events import decode, encode
 
-from .consumer import handle_event
-from .repos import BookingRepo
-
 
 class LocalPublisher:
-    """A relay publisher that hands events straight to the booking side."""
+    """A relay publisher that hands each event straight to handler(event)."""
 
-    def __init__(self, bookings: BookingRepo):
-        self.bookings = bookings
+    def __init__(self, handler):
+        self.handler = handler
 
     def publish(self, event: dict) -> None:
         # Through JSON, like a real message, so nothing non-serializable slips through.
-        handle_event(self.bookings, decode(encode(event)))
+        self.handler(decode(encode(event)))
 
 
 class LocalApartments:

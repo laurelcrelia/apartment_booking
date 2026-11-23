@@ -1,6 +1,6 @@
 # Plan: NGINX gateway, static frontend and two equal services
 
-Status: **in progress**: step 1 done. Follows [microservices-plan.md](microservices-plan.md), which split apartments into their own service.
+Status: **in progress**: steps 1–2 done. Follows [microservices-plan.md](microservices-plan.md), which split apartments into their own service.
 
 ## Why
 
@@ -160,7 +160,7 @@ The HTTP API tests (`api_tests/`) must pass **unchanged** after every step: in C
    - `ProxyFix`, so Flask sees the real client address
    - JSON `404` and `503` error responses
    - CI runs everything through NGINX
-2. **Booking events:**
+2. **Booking events** (done):
    - bookings get a `version`, an outbox and a relay
    - the apartments side gets a bookings replica and a consumer
    - relay and consumer are merged into one worker per service

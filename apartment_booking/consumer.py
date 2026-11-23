@@ -1,8 +1,7 @@
-"""Booking consumer: keeps the apartments replica in bookings.db up to date.
+"""Keeps the apartments replica in bookings.db up to date from apartment events.
 
-    RABBITMQ_URL=amqp://... BOOKINGS_DB=bookings.db python -m apartment_booking.consumer
-
-Consumes the apartments service's events from the durable queue QUEUE. Each
+The booking worker (worker.py) consumes the apartments service's events from
+the durable queue QUEUE and passes each one to on_message. Each
 event is applied in one transaction together with recording its event_id, so
 a redelivered event changes nothing, and a change is applied only if its
 version is newer than what the replica has, so events arriving out of order
@@ -11,8 +10,6 @@ can't roll an apartment back.
 from __future__ import annotations
 
 import logging
-import os
-from functools import partial
 
 from common.events import APARTMENT_CREATED, APARTMENT_DELETED, APARTMENT_UPDATED, decode
 
@@ -20,7 +17,6 @@ from .repos import BookingRepo
 
 QUEUE = "bookings.apartments"
 BINDING = "apartment.*"
-HEARTBEAT_FILE = "/tmp/booking-consumer.heartbeat"
 
 log = logging.getLogger("apartment_booking.consumer")
 
@@ -54,19 +50,3 @@ def on_message(repo: BookingRepo, body: bytes) -> None:
     if handle_event(repo, event):
         log.info("applied %s for apartment %s (version %s)",
                  event["type"], event["data"]["id"], event["data"]["version"])
-
-
-def main() -> None:  # pragma: no cover - needs a broker; exercised by the Compose CI job
-    from common.health import beat
-    from common.rabbitmq import consume, run_forever
-
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
-    repo = BookingRepo(os.environ.get("BOOKINGS_DB", "bookings.db"))
-    url = os.environ["RABBITMQ_URL"]
-    heartbeat = os.environ.get("HEARTBEAT_FILE", HEARTBEAT_FILE)
-    run_forever(lambda: consume(url, QUEUE, BINDING, partial(on_message, repo),
-                                on_tick=partial(beat, heartbeat)), "consumer")
-
-
-if __name__ == "__main__":  # pragma: no cover
-    main()
