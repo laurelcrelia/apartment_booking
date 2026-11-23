@@ -174,7 +174,8 @@ jobs:
           echo "web 8000 -> '$published'"
           if echo "$published" | grep -q ':[1-9]'; then echo "web must not be published"; exit 1; fi
           docker compose stop web
-          test "$(curl -s -o body.json -w '%{http_code}' http://localhost:8000/api/apartments)" = 503
+          # --max-time: the 503 must come quickly, not after NGINX's connect timeout
+          test "$(curl -s --max-time 15 -o body.json -w '%{http_code}' http://localhost:8000/api/apartments)" = 503
           grep -q '"service_unavailable"' body.json
           docker compose start web
           docker compose up -d --wait

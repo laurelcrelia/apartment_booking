@@ -106,7 +106,7 @@ compose-e2e:
     # Compose prints ":0" for a port that isn't published, "host:port" otherwise.
     - if (docker compose port web 8000 2>/dev/null || true) | grep -q ':[1-9]'; then echo "web must not be published"; exit 1; fi
     - docker compose stop web
-    - test "$(curl -s -o body.json -w '%{http_code}' http://localhost:$APP_PORT/api/apartments)" = 503
+    - test "$(curl -s --max-time 15 -o body.json -w '%{http_code}' http://localhost:$APP_PORT/api/apartments)" = 503
     - grep -q '"service_unavailable"' body.json
     - docker compose start web
     - docker compose up -d --wait

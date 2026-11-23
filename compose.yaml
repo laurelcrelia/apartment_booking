@@ -93,8 +93,8 @@ services:
       web:
         condition: service_healthy
     restart: unless-stopped
-    healthcheck:  # healthy while it serves the app
-      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8000/api/health"]
+    healthcheck:  # the gateway itself, independent of the services behind it
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8081/healthz"]
       interval: 10s
       timeout: 3s
       retries: 3
