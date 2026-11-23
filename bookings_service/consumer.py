@@ -18,7 +18,7 @@ from .repos import BookingRepo
 QUEUE = "bookings.apartments"
 BINDING = "apartment.*"
 
-log = logging.getLogger("apartment_booking.consumer")
+log = logging.getLogger("bookings_service.consumer")
 
 
 def handle_event(repo: BookingRepo, event: dict) -> bool:

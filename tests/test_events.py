@@ -7,14 +7,15 @@ import unittest
 from contextlib import closing
 from functools import partial
 
-from apartment_booking.consumer import handle_event, on_message
-from apartment_booking.inprocess import LocalBookings, LocalPublisher
-from apartment_booking.repos import BookingRepo
-from apartment_booking.service import BookingService, open_service
+from bookings_service.consumer import handle_event, on_message
+from bookings_service.repos import BookingRepo
+from bookings_service.service import BookingService
 from apartments_service.repo import ApartmentRepo, enqueue_snapshot
 from apartments_service.service import ApartmentService
 from common.errors import NotFoundError, ServiceUnavailableError
 from common.relay import Relay
+from devstack import LocalPublisher
+from tests.helpers import BookingsLink, Services
 from common.events import (APARTMENT_CREATED, APARTMENT_DELETED, APARTMENT_UPDATED, decode, encode,
                            new_event)
 
@@ -158,7 +159,7 @@ class ConsumerTests(unittest.TestCase):
         self.assertIsNone(self.replica())
 
     def test_on_message(self):
-        with self.assertLogs("apartment_booking.consumer", logging.INFO) as logs:
+        with self.assertLogs("bookings_service.consumer", logging.INFO) as logs:
             on_message(self.repo, encode(apartment_event(APARTMENT_CREATED, apt_id=7)))
             on_message(self.repo, b"{broken")
         self.assertEqual(self.replica(7)["name"], "Loft")
@@ -172,23 +173,9 @@ class ReplicaInBookingRulesTests(unittest.TestCase):
     def setUp(self):
         self.apartments_repo = ApartmentRepo(":memory:")
         self.bookings = BookingRepo(":memory:")
-        self.apartments = ApartmentService(self.apartments_repo, LocalBookings(self.bookings))
+        self.apartments = ApartmentService(self.apartments_repo, BookingsLink(self.bookings))
         self.svc = BookingService(self.bookings, self.apartments)
         self.relay = Relay(self.apartments_repo.outbox, LocalPublisher(partial(handle_event, self.bookings)))
-
-    def search(self, **kw):
-        return [a["id"] for a in self.svc.search_available("2026-11-01", "2026-11-02", **kw)]
-
-    def test_search_sees_apartments_once_events_arrive(self):
-        self.apartments.add("Loft", "x", rooms=2)
-        self.assertEqual(self.search(), [])
-        self.relay.publish_pending()
-        self.assertEqual(self.search(), [1])
-        self.assertEqual(self.search(min_rooms=3), [])
-        self.apartments.update(1, rooms=3)
-        self.relay.publish_pending()
-        self.assertEqual(self.search(min_rooms=3), [1])
-        self.assertEqual(self.svc.search_available("2026-11-01", "2026-11-02")[0]["rooms"], 3)
 
     def test_booking_a_brand_new_apartment_reads_through(self):
         self.apartments.add("Loft", "x")
@@ -219,20 +206,12 @@ class ReplicaInBookingRulesTests(unittest.TestCase):
 
         self.svc.apartments = Down()
         self.assertEqual(self.svc.create_booking(1, "Ann", "2026-11-01", "2026-11-05")["id"], 1)
-        self.assertEqual(self.search(), [])
         self.svc.change_booking(1, apt_id=1, check_out="2026-11-06")
         with self.assertRaises(ServiceUnavailableError):
             self.svc.create_booking(2, "Bob", "2026-11-01", "2026-11-05")  # unknown and can't ask
 
 
-class InProcessTests(unittest.TestCase):
-    def test_replica_is_updated_right_away(self):
-        svc = open_service()
-        svc.add_apartment("Loft", "x")
-        self.assertEqual([a["id"] for a in svc.search_available("2026-11-01", "2026-11-02")], [1])
-        svc.remove_apartment(1)
-        self.assertEqual(svc.search_available("2026-11-01", "2026-11-02"), [])
-
+class StartupTests(unittest.TestCase):
     def test_existing_apartments_reach_the_replica_on_startup(self):
         with tempfile.TemporaryDirectory() as tmp:
             apartments_db = os.path.join(tmp, "apartments.db")
@@ -241,8 +220,9 @@ class InProcessTests(unittest.TestCase):
                 conn.execute("CREATE TABLE apartments (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT,"
                              " address TEXT, rooms INTEGER, price REAL, version INTEGER DEFAULT 1)")
                 conn.execute("INSERT INTO apartments (name, address, rooms, price) VALUES ('Old', 'x', 1, 0)")
-            svc = open_service(apartments_db, os.path.join(tmp, "bookings.db"))
-            self.assertEqual([a["name"] for a in svc.search_available("2026-11-01", "2026-11-02")], ["Old"])
+            svc = Services(apartments_db, os.path.join(tmp, "bookings.db"))  # delivers pending events
+            with svc.bookings_repo.reading() as table:
+                self.assertEqual(table.replica_get(1)["name"], "Old")
             # A fresh database needs no snapshot: new apartments announce themselves.
             self.assertEqual(ApartmentRepo(os.path.join(tmp, "new.db")).outbox.snapshot_once(), 0)
 

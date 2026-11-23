@@ -41,7 +41,7 @@ coverage:
   script:
     - python3 -m venv .venv
     - .venv/bin/pip install -r requirements-dev.txt
-    - .venv/bin/coverage run --source=apartment_booking,apartments_service,common -m unittest -v
+    - .venv/bin/coverage run --source=bookings_service,apartments_service,common,booking_cli,devstack -m unittest -v
     - .venv/bin/coverage report -m
     - .venv/bin/coverage xml
     - .venv/bin/coverage html
@@ -110,21 +110,21 @@ compose-e2e:
     - "curl -fsS -X POST -H 'Content-Type: application/json' -d \"{\\\"apartment_id\\\": $ID, \\\"check_in\\\": \\\"2099-12-10\\\", \\\"check_out\\\": \\\"2099-12-11\\\"}\" http://localhost:$APP_PORT/api/bookings"
     - docker compose start apartments
     - docker compose up -d --wait
-    # Gateway routes by path: only the gateway is published, and with the web app down only
+    # Gateway routes by path: only the gateway is published, and with the booking service down only
     # its parts fail (bookings, and deletes, which need the active-bookings check).
     # Compose prints ":0" for a port that isn't published, "host:port" otherwise.
-    - if (docker compose port web 8000 2>/dev/null || true) | grep -q ':[1-9]'; then echo "web must not be published"; exit 1; fi
-    - docker compose stop web
+    - if (docker compose port bookings 8000 2>/dev/null || true) | grep -q ':[1-9]'; then echo "bookings must not be published"; exit 1; fi
+    - docker compose stop bookings
     - curl -fsS --max-time 15 "http://localhost:$APP_PORT/api/apartments?from=2099-01-01&to=2099-01-02" > /dev/null
     - test "$(curl -s --max-time 15 -o body.json -w '%{http_code}' http://localhost:$APP_PORT/api/bookings)" = 503
     - grep -q '"service_unavailable"' body.json
     - test "$(curl -s --max-time 15 -o body.json -w '%{http_code}' -X DELETE http://localhost:$APP_PORT/api/apartments/$ID)" = 503
     - grep -q '"service_unavailable"' body.json
-    - docker compose start web
+    - docker compose start bookings
     - docker compose up -d --wait
     - curl -fsS http://localhost:$APP_PORT/api/bookings > /dev/null
     - curl -fsS http://localhost:$APP_PORT/api/apartments/$ID > /dev/null
-    - docker compose run --rm booking apartment view $ID
+    - docker compose run --rm cli apartment view $ID
     - docker compose --profile test run --rm --build tests
   after_script:
     - docker compose logs

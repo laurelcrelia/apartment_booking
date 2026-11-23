@@ -6,29 +6,38 @@ Authors: Laurel Matt and Kleidi Gjeta
 
 Web app for managing apartments and bookings, with availability search and overlap prevention. It has web forms for every workflow, a REST API documented with OpenAPI, and a command-line interface. All three share the same data.
 
-The backend is being split into microservices (see [documentation/microservices-plan.md](documentation/microservices-plan.md)). Apartments already run as their own **apartments service** with their own database. The web app owns bookings, serves the UI and the public REST API, and calls the apartments service over HTTP for apartment changes. Each service publishes its changes as events through RabbitMQ, and keeps a local copy (replica) of the other service's data from those events. The booking service checks that an apartment exists against its copy of the apartments, so booking keeps working while the apartments service is down. The apartments service answers availability search from its copy of the bookings, and asks the booking service over HTTP before deleting an apartment, so an apartment with active bookings can never be deleted:
+The app is split into a **frontend** and two **microservices** behind an **NGINX gateway**, each service with its own SQLite database, talking to each other through **RabbitMQ** (pub/sub) and, where a rule needs a strict answer, over HTTP:
 
 ```
-browser ──► nginx ──► web (apartment_booking) ──HTTP──► apartments (apartments_service)
-                      bookings.db + outbox                 apartments.db + outbox
-                      └ apartments replica                 └ bookings replica
-                            ▲  │                                 │  ▲
-                            │  ▼                                 ▼  │
-                      bookings-worker ◄──── RabbitMQ ────► apartments-worker
-                       booking events out, apartment events in (and the reverse)
+                         browser / CLI
+                               │
+                     ┌─────────▼─────────┐
+                     │   nginx gateway   │  /            → frontend/ (static HTML + JS)
+                     │                   │  /api/apartments → apartments
+                     └───┬───────────┬───┘  /api/…        → bookings
+                         ▼           ▼
+                   apartments ◄──► bookings        HTTP: delete check, read-through
+                         │           │
+              apartments.db         bookings.db    (each: data + outbox + replica)
+                         │           │
+              apartments-worker   bookings-worker  outbox relay + event consumer
+                         └─► RabbitMQ ◄─┘          events in both directions
 ```
 
-NGINX is the gateway and the only way in from outside. It serves the **frontend**, plain HTML pages in `frontend/` whose JavaScript loads and changes all data through the REST API, routes `/api/apartments` to the apartments service and the rest of `/api` (bookings, health, the spec) to `web`; [documentation/gateway-plan.md](documentation/gateway-plan.md) describes the next steps.
+- The **frontend** is plain HTML pages; their JavaScript loads and changes all data through the REST API.
+- The **apartments service** owns apartments. It answers availability search from its copy (replica) of the bookings, and asks the booking service over HTTP before deleting an apartment, so an apartment with active bookings can never be deleted.
+- The **booking service** owns bookings. It checks that an apartment exists against its copy of the apartments, so booking keeps working while the apartments service is down.
+- Each service writes every change and its event in one transaction (outbox); its worker publishes the events to RabbitMQ and applies the other service's events to its replica. The replicas can lag a moment behind.
 
-The copy can lag a moment behind: an apartment created a second ago may not show up in availability search yet (booking it works right away).
+How it got here: [documentation/microservices-plan.md](documentation/microservices-plan.md) (splitting out apartments, events) and [documentation/gateway-plan.md](documentation/gateway-plan.md) (gateway, frontend, pub/sub both ways).
 
 ## Quick start (Docker)
 
 Requires Docker with Compose v2. No local Python needed. From a fresh checkout:
 
 ```sh
-git clone https://github.com/laurelcrelia/apartment_booking.git
-cd apartment_booking
+git clone https://github.com/laurelcrelia/bookings_service.git
+cd bookings_service
 printf 'RABBITMQ_PASSWORD=%s\n' "$(openssl rand -hex 24)" > .env   # once: creates your local secrets
 ```
 
@@ -40,21 +49,21 @@ Compose won't start without `.env`; see [Secrets](#secrets).
 | Open the app | <http://localhost:8000> |
 | Stop the app (data is kept) | `docker compose down` |
 | Run the tests | `docker compose --profile test run --rm --build tests` |
-| View server logs | `docker compose logs -f nginx web apartments` (Ctrl+C to stop following) |
+| View server logs | `docker compose logs -f nginx apartments bookings` (Ctrl+C to stop following) |
 | Delete all data | `docker compose down -v` |
 
 Compose starts six containers:
 
 | Container | What it does |
 |---|---|
-| `nginx` | gateway: the only published port; serves the frontend, routes `/api/apartments` to `apartments` and the rest of `/api` to `web` |
-| `web` | the booking service (`/api/bookings`) |
+| `nginx` | gateway: the only published port; serves the frontend, routes `/api/apartments` to `apartments` and the rest of `/api` to `bookings` |
+| `bookings` | booking service (`/api/bookings`) |
 | `apartments` | apartments service (`/api/apartments`, including availability search) |
 | `apartments-worker` | publishes the apartments service's events, and updates its bookings replica from booking events |
 | `bookings-worker` | publishes the booking service's events, and updates its apartments replica from apartment events |
 | `rabbitmq` | message broker; management UI on <http://localhost:15672> (log in with `RABBITMQ_USER`, default `booking`, and your `RABBITMQ_PASSWORD` from `.env`) |
 
-`--wait` returns once everything is up and healthy. Each worker runs two tasks, an outbox relay and an event consumer, and counts as healthy only while both are connected to RabbitMQ and working: each task writes a heartbeat file, and the health check (`python -m common.health`) fails if either is older than 30 seconds. If a task stops for good, the worker exits and Docker restarts it. Only `nginx` and the RabbitMQ UI are published, on `127.0.0.1`, so they can't be reached from other machines. When a service is down, `nginx` answers its part of the API with the usual JSON `503 service_unavailable`, and the other service keeps working: with `apartments` down, bookings (including creating them) still work; with `web` down, apartments and availability search still work, but deleting an apartment answers `503`, since it needs the booking service's check.
+`--wait` returns once everything is up and healthy. Each worker runs two tasks, an outbox relay and an event consumer, and counts as healthy only while both are connected to RabbitMQ and working: each task writes a heartbeat file, and the health check (`python -m common.health`) fails if either is older than 30 seconds. If a task stops for good, the worker exits and Docker restarts it. Only `nginx` and the RabbitMQ UI are published, on `127.0.0.1`, so they can't be reached from other machines. When a service is down, `nginx` answers its part of the API with the usual JSON `503 service_unavailable`, and the other service keeps working: with `apartments` down, bookings (including creating them) still work; with `bookings` down, apartments and availability search still work, but deleting an apartment answers `503`, since it needs the booking service's check.
 
 Each service has its own volume and SQLite database: bookings in `booking-data` (`/data/bookings.db`) and apartments in `apartments-data` (`/data/apartments.db`); RabbitMQ keeps its queues in `rabbitmq-data`. They survive `docker compose down` and image rebuilds; only `docker compose down -v` deletes them.
 
@@ -85,8 +94,8 @@ docker compose up -d
 
 ```sh
 docker compose up -d --build --wait
-docker compose run --rm --no-deps -v apartments-data:/apartments --entrypoint python booking \
-  -m apartment_booking.migrate /data/data.json --apartments-db /apartments/apartments.db
+docker compose run --rm --no-deps -v apartments-data:/apartments --entrypoint python bookings \
+  -m bookings_service.migrate /data/data.json --apartments-db /apartments/apartments.db
 ```
 
 **Upgrading from the first SQLite version** (`apartments.db` still in `booking-data`): move it to the apartments service's volume:
@@ -121,7 +130,7 @@ The forms send JSON to the REST API below and show its error messages inline, so
 
 ## REST API
 
-Base URL: `http://localhost:8000/api`. The full specification, with schemas, examples and errors, is [`apartment_booking/openapi.yaml`](apartment_booking/openapi.yaml), served at [`/api/openapi.yaml`](http://localhost:8000/api/openapi.yaml) and rendered at [`/api/docs`](http://localhost:8000/api/docs).
+Base URL: `http://localhost:8000/api`. The full specification, with schemas, examples and errors, is [`bookings_service/openapi.yaml`](bookings_service/openapi.yaml), served at [`/api/openapi.yaml`](http://localhost:8000/api/openapi.yaml) and rendered at [`/api/docs`](http://localhost:8000/api/docs).
 
 | Method | Path | Description | Success |
 |---|---|---|---|
@@ -170,12 +179,13 @@ curl -X PATCH http://localhost:8000/api/bookings/1 \
 
 ## Command-line interface
 
-The CLI uses the same data as the web app. With Docker, put the command after `docker compose run --rm booking`:
+The CLI is a client of the public REST API: it talks to the running app through the gateway (`--api URL`, default `$API_URL` or `http://localhost:8000`), so it works on the same data as the web pages. With Docker, put the command after `docker compose run --rm cli`:
 
 ```sh
-docker compose run --rm booking --help
-docker compose run --rm booking apartment add --name Loft --address "1 Beach Rd"
-docker compose run --rm booking apartment list
+docker compose run --rm cli --help
+docker compose run --rm cli apartment add --name Loft --address "1 Beach Rd"
+docker compose run --rm cli apartment list
+python3 booking.py apartment list      # from your machine, with the app on localhost:8000
 ```
 
 ```
@@ -205,23 +215,24 @@ python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements-dev.txt
 
-python3 -m apartment_booking.local --port 8000      # app on http://localhost:8000
-python3 booking.py --help                           # CLI
+python3 -m devstack --port 8000                     # app on http://localhost:8000
+python3 booking.py --help                           # CLI (talks to the running app)
 python3 -m unittest -v                              # tests
 ```
 
-`apartment_booking.local` runs both services in one process behind a small Python stand-in for the NGINX gateway (same routes), with apartments in `./apartments.db` and bookings in `./bookings.db`; events go straight from each outbox to the other side's replica, with no RabbitMQ needed. That is the simplest way to develop. To run the services separately, as deployed, use Docker Compose.
+`devstack` runs the whole app in one process with the same code as Docker, minus NGINX and RabbitMQ: both services as separate HTTP servers calling each other, a Python stand-in for the gateway with the same routes (`devstack/gateway.py`), and events handed straight from each outbox to the other service, right after every change. Data is kept in `./apartments.db` and `./bookings.db` (`APARTMENTS_DB`, `BOOKINGS_DB`). The tests use it too.
 
 | Variable | Used by | Default | Meaning |
 |---|---|---|---|
-| `BOOKINGS_DB` | web, CLI | `bookings.db` | bookings database |
-| `APARTMENTS_URL` | web, CLI | unset | apartments service to call; if unset, apartments are served in-process |
+| `BOOKINGS_DB` | booking service and worker | `bookings.db` | bookings database |
+| `APARTMENTS_URL` | booking service | (required) | apartments service, to look up apartments its replica doesn't know yet |
 | `BOOKINGS_URL` | apartments service | (required) | booking service to ask for active bookings before deleting an apartment |
-| `APARTMENTS_DB` | apartments service and worker, or web/CLI without `APARTMENTS_URL` | `apartments.db` | apartments database |
+| `APARTMENTS_DB` | apartments service and worker | `apartments.db` | apartments database |
 | `RABBITMQ_URL` | workers | (required) | RabbitMQ to publish to or consume from, including the login |
-| `TRUSTED_PROXIES` | web | `0` | number of reverse proxies in front of the app whose `X-Forwarded-*` headers to trust; Compose sets `1` for nginx. Leave it at `0` when the app is reachable directly |
+| `API_URL` | CLI | `http://localhost:8000` | the app the CLI talks to |
+| `TRUSTED_PROXIES` | both services | `0` | number of reverse proxies in front of the app whose `X-Forwarded-*` headers to trust; Compose sets `1` for nginx. Leave it at `0` when the app is reachable directly |
 
-The CLI takes the same settings as `--bookings-db`, `--apartments-url` and `--apartments-db`. To import an old `data.json`, run `python3 -m apartment_booking.migrate data.json`.
+To import an old `data.json`, run `python3 -m bookings_service.migrate data.json`.
 
 `scripts/smoke_test.py` runs every workflow against a running server and cleans up afterwards: `python3 scripts/smoke_test.py http://localhost:8000`.
 
@@ -230,7 +241,7 @@ The CLI takes the same settings as `--bookings-db`, `--apartments-url` and `--ap
 `api_tests/` is a black-box test suite for the REST API. It only sends HTTP requests, never imports the app's internals, creates its own data with unique names, and cleans up afterwards. That lets the same tests check the current app and, unchanged, the app after it is split into microservices (see [documentation/microservices-plan.md](documentation/microservices-plan.md)).
 
 ```sh
-python -m unittest discover -s api_tests -v                                      # app started in-process on a free port
+python -m unittest discover -s api_tests -v                                      # app started with devstack on a free port
 API_BASE_URL=http://localhost:8000 python -m unittest discover -s api_tests -v   # a running app, e.g. docker compose
 ```
 
@@ -253,26 +264,26 @@ HEADED=1 python -m unittest discover -s e2e  # watch them in a browser window
 ## Project layout
 
 ```
-apartment_booking/  web app: UI, public REST API, bookings
-  service.py      booking rules (shared by web app and CLI)
+bookings_service/  booking service: /api/bookings, /api/health, the API spec
+  app.py          Flask app factory
+  api.py          REST API routes
+  openapi.yaml    specification of the whole public API
+  service.py      booking rules
   repos.py        SQLite repository for bookings, with the event outbox and the apartments replica
-  apartments_client.py  HTTP client for the apartments service
-  local.py        both services behind a stand-in gateway, for development and tests
+  apartments_client.py  HTTP client for the apartments service (read-through)
   consumer.py     applies apartment events to the apartments replica
   worker.py       relay + consumer (process: bookings-worker)
-  inprocess.py    apartments service and event delivery inside this process
   migrate.py      one-off import of the old data.json
-  api.py          REST API under /api
-  openapi.yaml    API specification
-  web.py          Flask app factory (API only)
-  cli.py          command-line interface
-apartments_service/  apartments service: internal JSON API for apartments
+apartments_service/  apartments service: /api/apartments, including availability search
   app.py          Flask app (/api/apartments, /api/health)
   bookings_client.py  HTTP client for the booking service (delete check)
   service.py      apartment rules
   repo.py         SQLite repository for apartments, with the event outbox and the bookings replica
   consumer.py     applies booking events to the bookings replica
   worker.py       relay + consumer (process: apartments-worker)
+booking_cli/      command-line client of the public API (booking.py)
+devstack/         the whole app without Docker, for development and tests
+  gateway.py      Python stand-in for the NGINX gateway (same routes)
 common/           shared by both services
   events.py       event format and types
   outbox.py       transactional outbox
@@ -306,9 +317,9 @@ GitHub Actions (`.github/workflows/ci.yml`) runs on every push to `main` and on 
 
 - **Docker tests**: builds the test image for each Python version from 3.9 to 3.13 and runs the unit tests inside it.
 - **Code coverage**: measures coverage with [coverage.py](https://coverage.readthedocs.io/) and fails if it drops below 90%. The report is shown in the run summary and uploaded as the `coverage-html` artifact.
-- **HTTP API tests**: runs `api_tests/` against the app started in-process.
+- **HTTP API tests**: runs `api_tests/` against the app started with `devstack`.
 - **Browser tests**: installs Playwright and Chromium and runs the `e2e/` tests against the frontend.
-- **Docker Compose end-to-end**: starts the app with Compose, runs `scripts/smoke_test.py` and the `api_tests/` suite against it, restarts it to check that data persists, checks that an apartment change made while the bookings worker is stopped reaches the booking side once it is back, that booking events reach the apartments service, stops the apartments service to check for `503` while bookings keep working, checks that only the gateway is published and that with `web` stopped apartments keep working while bookings and deletes answer JSON `503`, and runs the CLI and the tests through Compose.
+- **Docker Compose end-to-end**: starts the app with Compose, runs `scripts/smoke_test.py` and the `api_tests/` suite against it, restarts it to check that data persists, checks that an apartment change made while the bookings worker is stopped reaches the booking side once it is back, that booking events reach the apartments service, stops the apartments service to check for `503` while bookings keep working, checks that only the gateway is published and that with `bookings` stopped apartments keep working while bookings and deletes answer JSON `503`, and runs the CLI and the tests through Compose.
 
 To build for a specific Python version locally:
 
@@ -318,7 +329,7 @@ docker build --build-arg PYTHON_VERSION=3.9 -t apartment-booking:py3.9 .
 
 ## GitLab CI
 
-The project is mirrored to [gitlab.inf.unibz.it](https://gitlab.inf.unibz.it/LaurelCrelia.Matt/apartment_booking). `.gitlab-ci.yml` runs the same jobs as GitHub Actions on a self-hosted runner using the **shell executor**: jobs run directly on the runner machine and use its Docker, so no Docker-in-Docker is needed.
+The project is mirrored to [gitlab.inf.unibz.it](https://gitlab.inf.unibz.it/LaurelCrelia.Matt/bookings_service). `.gitlab-ci.yml` runs the same jobs as GitHub Actions on a self-hosted runner using the **shell executor**: jobs run directly on the runner machine and use its Docker, so no Docker-in-Docker is needed.
 
 Each job uses its own Compose project, volumes (`booking-data-ci-<job id>`, `apartments-data-ci-<job id>`, `rabbitmq-data-ci-<job id>`) and ports (app `18000`, RabbitMQ UI `25672`), so CI never touches the app or data you run yourself on the same machine. The Compose job writes its own `.env` with a throwaway RabbitMQ password. Override these for your own use with `APP_PORT`, `RABBITMQ_UI_PORT`, `BOOKING_VOLUME`, `APARTMENTS_VOLUME` and `RABBITMQ_VOLUME`.
 

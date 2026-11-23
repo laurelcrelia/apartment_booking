@@ -31,7 +31,7 @@ services:
     command: ["gunicorn", "--bind", "0.0.0.0:8000", "--workers", "2", "--threads", "4",
               "--access-logfile", "-", "apartments_service.app:create_app()"]
     environment:
-      BOOKINGS_URL: http://web:8000  # delete check: asks for active bookings
+      BOOKINGS_URL: http://bookings:8000  # delete check: asks for active bookings
       TRUSTED_PROXIES: "1"           # nginx
     volumes:
       - apartments-data:/data
@@ -72,13 +72,13 @@ services:
   bookings-worker:
     build: .
     image: apartment-booking
-    command: ["python", "-m", "apartment_booking.worker"]
+    command: ["python", "-m", "bookings_service.worker"]
     environment:
       RABBITMQ_URL: *rabbitmq-url
     volumes:
       - booking-data:/data
     depends_on:
-      web:
+      bookings:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
@@ -92,7 +92,7 @@ services:
       start_period: 30s
 
   # Gateway: the only way in from outside. Serves the frontend; /api/apartments ->
-  # apartments, the rest of /api -> web.
+  # apartments, the rest of /api -> bookings.
   nginx:
     image: nginx:1.27-alpine
     ports:
@@ -101,7 +101,9 @@ services:
       - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
       - ./frontend:/usr/share/nginx/html:ro  # the static pages
     depends_on:
-      web:
+      apartments:
+        condition: service_healthy
+      bookings:
         condition: service_healthy
     restart: unless-stopped
     healthcheck:  # the gateway itself, independent of the services behind it
@@ -113,7 +115,7 @@ services:
 
   # Booking service (/api/bookings); calls the apartments service over HTTP.
   # Internal only: reached through nginx.
-  web:
+  bookings:
     build: .
     image: apartment-booking
     environment:
@@ -132,19 +134,17 @@ services:
       retries: 3
       start_period: 5s
 
-  # Command-line interface, sharing the web app's data volume and apartments service:
-  #   docker compose run --rm booking apartment list
-  booking:
+  # Command-line interface, a client of the public API through the gateway:
+  #   docker compose run --rm cli apartment list
+  cli:
     build: .
     image: apartment-booking
     entrypoint: ["python", "booking.py"]
     command: ["--help"]
     environment:
-      APARTMENTS_URL: http://apartments:8000
-    volumes:
-      - booking-data:/data
+      API_URL: http://nginx:8000
     depends_on:
-      apartments:
+      nginx:
         condition: service_healthy
     profiles: ["cli"]
 

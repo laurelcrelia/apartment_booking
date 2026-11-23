@@ -8,10 +8,11 @@ from contextlib import closing, redirect_stderr, redirect_stdout
 from io import StringIO
 from unittest import mock
 
-from apartment_booking.migrate import MigrationError, main, migrate
-from apartment_booking.repos import BookingRepo
+from bookings_service.migrate import MigrationError, main, migrate
+from bookings_service.repos import BookingRepo
 from apartments_service.repo import ApartmentRepo
-from apartment_booking.service import OverlapError, open_service
+from common.errors import OverlapError
+from tests.helpers import Services
 from common.db import Database
 
 
@@ -169,8 +170,8 @@ class TransactionTests(TempDirTestCase):
 
     def test_concurrent_services_cannot_double_book(self):
         # Two services on the same files behave like two server processes.
-        open_service(self.apartments_db, self.bookings_db).add_apartment("Loft", "x")
-        services = [open_service(self.apartments_db, self.bookings_db) for _ in range(8)]
+        Services(self.apartments_db, self.bookings_db).add_apartment("Loft", "x")
+        services = [Services(self.apartments_db, self.bookings_db) for _ in range(8)]
         barrier = threading.Barrier(len(services))
         results = []
 
@@ -190,7 +191,7 @@ class TransactionTests(TempDirTestCase):
         self.assertEqual(sorted(results), ["ok"] + ["overlap"] * 7)
 
     def test_memory_databases_are_independent(self):
-        a, b = open_service(), open_service()
+        a, b = Services(), Services()
         a.add_apartment("Loft", "x")
         self.assertEqual(b.list_apartments(), [])
 
@@ -219,7 +220,7 @@ class MigrationTests(TempDirTestCase):
 
     def test_keeps_ids_and_continues_numbering(self):
         self.assertEqual(migrate(self.write_json(), self.apartments_db, self.bookings_db), (2, 2))
-        svc = open_service(self.apartments_db, self.bookings_db)
+        svc = Services(self.apartments_db, self.bookings_db)
         self.assertEqual(svc.get_apartment(2)["name"], "Loft")
         self.assertEqual(svc.get_apartment(3)["price"], 75.5)
         self.assertEqual(svc.get_booking(1)["status"], "cancelled")
@@ -232,7 +233,7 @@ class MigrationTests(TempDirTestCase):
     def test_deleted_ids_stay_unused(self):
         state = {**self.STATE, "apartments": {}, "bookings": {}}
         migrate(self.write_json(state), self.apartments_db, self.bookings_db)
-        svc = open_service(self.apartments_db, self.bookings_db)
+        svc = Services(self.apartments_db, self.bookings_db)
         self.assertEqual(svc.add_apartment("New", "x")["id"], 4)
 
     def test_refuses_non_empty_databases(self):

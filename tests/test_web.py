@@ -4,12 +4,15 @@ import unittest
 import yaml
 from openapi_spec_validator import validate
 
-from apartment_booking.api import SPEC_PATH
-from apartment_booking.service import open_service
+from bookings_service.api import SPEC_PATH
 from werkzeug.test import Client
 
-from apartment_booking.local import FRONTEND_DIR, PAGES, create_local_app
-from apartment_booking.web import create_app
+import devstack
+from bookings_service.repos import BookingRepo
+from bookings_service.service import BookingService
+from devstack.gateway import FRONTEND_DIR, PAGES
+from tests.helpers import Services
+from bookings_service.app import create_app
 from apartments_service.app import create_app as create_apartments_app
 
 NGINX_CONF = FRONTEND_DIR.parent / "nginx" / "default.conf"
@@ -25,8 +28,8 @@ class OpenApiSpecTests(unittest.TestCase):
 
     def test_every_api_route_is_documented(self):
         # The public API is served by both services behind the gateway.
-        service = open_service()
-        apps = [create_app(service), create_apartments_app(service.apartments.service)]
+        services = Services()
+        apps = [create_app(services.bookings), create_apartments_app(services.apartments)]
         prefix = self.spec["servers"][0]["url"]
         routes = set()
         for rule in (rule for app in apps for rule in app.url_map.iter_rules()):
@@ -44,10 +47,12 @@ class OpenApiSpecTests(unittest.TestCase):
 
 
 class FrontendTests(unittest.TestCase):
-    """The static frontend, as the gateway serves it (apartment_booking/local.py)."""
+    """The static frontend, as the gateway serves it (devstack/gateway.py)."""
 
     def setUp(self):
-        self.client = Client(create_local_app(open_service()))
+        stack = devstack.start()
+        self.addCleanup(stack.stop)
+        self.client = Client(stack.gateway)
 
     def get(self, path, status=200):
         r = self.client.get(path)
@@ -72,7 +77,7 @@ class FrontendTests(unittest.TestCase):
         self.assertEqual(self.get("/static/app.js").mimetype, "text/javascript")
         self.assertEqual(self.get("/static/style.css").mimetype, "text/css")
         self.get("/static/missing.js", 404)
-        self.get("/static/../apartment_booking/service.py", 404)  # can't leave static/
+        self.get("/static/../bookings_service/service.py", 404)  # can't leave static/
 
     def test_unknown_paths_get_the_404_page(self):
         for path in ("/nope", "/apartments", "/apartments/abc", "/bookings/1/edit", "/index.html"):
@@ -85,7 +90,7 @@ class FrontendTests(unittest.TestCase):
         self.assertEqual(self.get("/api/nothing", 404).json["error"]["code"], "not_found")
 
     def test_web_app_serves_no_pages(self):
-        client = create_app(open_service()).test_client()
+        client = create_app(BookingService(BookingRepo(":memory:"), apartments=None)).test_client()
         for path in ("/", "/bookings", "/static/app.js", "/api/docs"):
             with self.subTest(path=path):
                 self.assertEqual(client.get(path).status_code, 404)

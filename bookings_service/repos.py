@@ -87,16 +87,6 @@ class BookingTable:
             " AND check_in < ? AND ? < check_out ORDER BY id LIMIT 1",
             (apt_id, ignore_id, check_out, check_in)).fetchone())
 
-    def available_apartments(self, check_in: str, check_out: str, min_rooms: int) -> list[dict]:
-        """Replica apartments with no active booking overlapping [check_in, check_out)."""
-        rows = self.conn.execute(
-            f"SELECT {APARTMENT_COLUMNS} FROM apartments_replica"
-            " WHERE deleted = 0 AND rooms >= ? AND id NOT IN ("
-            "   SELECT apartment_id FROM bookings"
-            "   WHERE status = 'active' AND check_in < ? AND ? < check_out)"
-            " ORDER BY id", (min_rooms, check_out, check_in))
-        return [dict(r) for r in rows]
-
     def insert(self, apt_id: int, guest: str, check_in: str, check_out: str, status: str) -> dict:
         cur = self.conn.execute(
             "INSERT INTO bookings (apartment_id, guest, check_in, check_out, status) VALUES (?, ?, ?, ?, ?)",

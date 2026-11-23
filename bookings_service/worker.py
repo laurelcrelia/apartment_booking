@@ -1,6 +1,6 @@
 """Booking worker: publishes booking events and consumes apartment events.
 
-    RABBITMQ_URL=amqp://... BOOKINGS_DB=bookings.db python -m apartment_booking.worker
+    RABBITMQ_URL=amqp://... BOOKINGS_DB=bookings.db python -m bookings_service.worker
 
 Runs next to the web app, on the bookings database: its relay publishes the
 outbox to the "bookings" exchange, and its consumer keeps the apartments

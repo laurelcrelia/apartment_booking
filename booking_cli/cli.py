@@ -1,4 +1,8 @@
-"""Command-line interface."""
+"""Command-line interface: a client of the public REST API, through the gateway.
+
+It needs the app to be running (e.g. `docker compose up`), and works on the
+same data as the web pages.
+"""
 from __future__ import annotations
 
 import argparse
@@ -6,7 +10,10 @@ import json
 import os
 import sys
 
-from .service import BookingError, BookingService, open_service
+from common.client import ServiceClient
+from common.errors import BookingError
+
+DEFAULT_API = "http://localhost:8000"
 
 PROG = "booking.py"
 
@@ -25,11 +32,8 @@ booking create --apartment ID --from DATE --to DATE [--guest NAME]
 booking change ID [--from DATE] [--to DATE] [--apartment ID] [--guest NAME]
 booking cancel ID
 Options (any command):
---json                print results as JSON
---apartments-url URL  apartments service (default: $APARTMENTS_URL); if unset,
-                      apartments are read from --apartments-db
---apartments-db PATH  apartments database (default: $APARTMENTS_DB or ./apartments.db)
---bookings-db PATH    bookings database (default: $BOOKINGS_DB or ./bookings.db)
+--json       print results as JSON
+--api URL    the app to talk to (default: $API_URL or {DEFAULT_API})
 Dates are YYYY-MM-DD; --to is the check-out day (exclusive).
 """
 
@@ -45,9 +49,7 @@ class _HelpAction(argparse.Action):
 
 def build_parser() -> argparse.ArgumentParser:
     common = argparse.ArgumentParser(add_help=False)
-    common.add_argument("--apartments-url", default=os.environ.get("APARTMENTS_URL"))
-    common.add_argument("--apartments-db", default=os.environ.get("APARTMENTS_DB", "apartments.db"))
-    common.add_argument("--bookings-db", default=os.environ.get("BOOKINGS_DB", "bookings.db"))
+    common.add_argument("--api", default=os.environ.get("API_URL", DEFAULT_API))
     common.add_argument("--json", action="store_true")
 
     p = argparse.ArgumentParser(prog=PROG, add_help=False)
@@ -114,37 +116,58 @@ def fmt_booking(b: dict) -> str:
             f"{b['check_in']} -> {b['check_out']} | {b['status']}")
 
 
-def run(args, svc: BookingService):
+class Api(ServiceClient):
+    """The public REST API; its error messages are shown as they are."""
+
+    @property
+    def unavailable(self) -> str:
+        return f"Can't reach the app at {self.base_url}; is it running?"
+
+
+def _given(**fields) -> dict:
+    return {k: v for k, v in fields.items() if v is not None}
+
+
+def run(args, api: Api):
     """Dispatch a parsed command. Returns (message, result) where result is a dict/list."""
     if args.group == "apartment":
+        path = f"/api/apartments/{getattr(args, 'id', '')}"
         if args.cmd == "list":
-            return "No apartments", svc.list_apartments()
+            return "No apartments", api.call("GET", "/api/apartments")
         if args.cmd == "view":
-            return None, svc.get_apartment(args.id)
+            return None, api.call("GET", path)
         if args.cmd == "add":
-            r = svc.add_apartment(args.name, args.address, args.rooms, args.price)
-            return "Added apartment", r
+            body = {"name": args.name, "address": args.address, "rooms": args.rooms, "price": args.price}
+            return "Added apartment", api.call("POST", "/api/apartments", body)
         if args.cmd == "update":
-            r = svc.update_apartment(args.id, args.name, args.address, args.rooms, args.price)
-            return "Updated apartment", r
+            body = _given(name=args.name, address=args.address, rooms=args.rooms, price=args.price)
+            return "Updated apartment", api.call("PATCH", path, body)
         if args.cmd == "remove":
-            return "Removed apartment", svc.remove_apartment(args.id)
+            apartment = api.call("GET", path)
+            api.call("DELETE", path)
+            return "Removed apartment", apartment
         if args.cmd == "search":
-            return "No apartments available", svc.search_available(
-                args.check_in, args.check_out, args.min_rooms)
+            query = {"from": args.check_in, "to": args.check_out, "min_rooms": args.min_rooms}
+            return "No apartments available", api.call("GET", "/api/apartments", query=query)
     elif args.group == "booking":
+        path = f"/api/bookings/{getattr(args, 'id', '')}"
         if args.cmd == "list":
-            return "No bookings", svc.list_bookings(args.apartment, args.guest, args.all)
+            query = _given(apartment_id=args.apartment, guest=args.guest)
+            if args.all:
+                query["include_cancelled"] = "true"
+            return "No bookings", api.call("GET", "/api/bookings", query=query)
         if args.cmd == "view":
-            return None, svc.get_booking(args.id)
+            return None, api.call("GET", path)
         if args.cmd == "create":
-            r = svc.create_booking(args.apartment, args.guest, args.check_in, args.check_out)
-            return "Created booking", r
+            body = {"apartment_id": args.apartment, "guest": args.guest,
+                    "check_in": args.check_in, "check_out": args.check_out}
+            return "Created booking", api.call("POST", "/api/bookings", body)
         if args.cmd == "change":
-            r = svc.change_booking(args.id, args.apartment, args.guest, args.check_in, args.check_out)
-            return "Changed booking", r
+            body = _given(apartment_id=args.apartment, guest=args.guest,
+                          check_in=args.check_in, check_out=args.check_out)
+            return "Changed booking", api.call("PATCH", path, body)
         if args.cmd == "cancel":
-            return "Cancelled booking", svc.cancel_booking(args.id)
+            return "Cancelled booking", api.call("PATCH", path, {"status": "cancelled"})
     raise BookingError("Unknown command")
 
 
@@ -154,9 +177,8 @@ def main(argv=None) -> int:
         print(HELP, end="")
         return 0
     args = build_parser().parse_args(argv)
-    svc = open_service(args.apartments_db, args.bookings_db, args.apartments_url)
     try:
-        message, result = run(args, svc)
+        message, result = run(args, Api(args.api, timeout=10))
     except BookingError as e:
         print(f"Error: {e}", file=sys.stderr)
         return 1
