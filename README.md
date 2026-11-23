@@ -9,12 +9,14 @@ Web app for managing apartments and bookings, with availability search and overl
 The backend is being split into microservices (see [documentation/microservices-plan.md](documentation/microservices-plan.md)). Apartments already run as their own **apartments service** with their own database. The web app owns bookings, serves the UI and the public REST API, and calls the apartments service over HTTP for apartment changes. Every apartment change is also published as an event through RabbitMQ, and the booking side keeps a local copy (replica) of the apartments from those events. Booking rules (does the apartment exist, which apartments are free) read that copy, so they keep working while the apartments service is down:
 
 ```
-browser / CLI ──► web (apartment_booking) ──HTTP──► apartments (apartments_service)
-                  bookings.db                        apartments.db + outbox
-                  └ apartments replica                     │
-                        ▲                                  ▼
-                  booking-consumer ◄── RabbitMQ ◄── apartments-relay
+browser ──► nginx ──► web (apartment_booking) ──HTTP──► apartments (apartments_service)
+                      bookings.db                        apartments.db + outbox
+                      └ apartments replica                     │
+                            ▲                                  ▼
+                      booking-consumer ◄── RabbitMQ ◄── apartments-relay
 ```
+
+NGINX is the gateway and the only way in from outside. For now it passes everything to `web`; [documentation/gateway-plan.md](documentation/gateway-plan.md) describes the next steps.
 
 The copy can lag a moment behind: an apartment created a second ago may not show up in availability search yet (booking it works right away).
 
@@ -36,20 +38,21 @@ Compose won't start without `.env`; see [Secrets](#secrets).
 | Open the app | <http://localhost:8000> |
 | Stop the app (data is kept) | `docker compose down` |
 | Run the tests | `docker compose --profile test run --rm --build tests` |
-| View server logs | `docker compose logs -f web apartments` (Ctrl+C to stop following) |
+| View server logs | `docker compose logs -f nginx web apartments` (Ctrl+C to stop following) |
 | Delete all data | `docker compose down -v` |
 
-Compose starts five containers:
+Compose starts six containers:
 
 | Container | What it does |
 |---|---|
-| `web` | web UI, public REST API, bookings |
+| `nginx` | gateway: the only published port, passes requests on to `web` |
+| `web` | web UI, public REST API, bookings (internal only) |
 | `apartments` | apartments service (internal only) |
 | `apartments-relay` | publishes the apartments service's events to RabbitMQ |
 | `booking-consumer` | updates the booking side's apartments replica from those events |
 | `rabbitmq` | message broker; management UI on <http://localhost:15672> (log in with `RABBITMQ_USER`, default `booking`, and your `RABBITMQ_PASSWORD` from `.env`) |
 
-`--wait` returns once everything is up and healthy. `apartments-relay` and `booking-consumer` count as healthy only while they are connected to RabbitMQ and working: each writes a heartbeat file, and its health check (`python -m common.health`) fails if the heartbeat is older than 30 seconds. Only `web` and the RabbitMQ UI are published, on `127.0.0.1`, so they can't be reached from other machines. If `apartments` is down, the API answers `503 service_unavailable` for apartment pages and changes, while bookings (including creating them) and availability search keep working from the replica.
+`--wait` returns once everything is up and healthy. `apartments-relay` and `booking-consumer` count as healthy only while they are connected to RabbitMQ and working: each writes a heartbeat file, and its health check (`python -m common.health`) fails if the heartbeat is older than 30 seconds. Only `nginx` and the RabbitMQ UI are published, on `127.0.0.1`, so they can't be reached from other machines. If `web` is down, `nginx` answers API requests with the usual JSON `503 service_unavailable`. If `apartments` is down, the API answers `503 service_unavailable` for apartment pages and changes, while bookings (including creating them) and availability search keep working from the replica.
 
 Each service has its own volume and SQLite database: bookings in `booking-data` (`/data/bookings.db`) and apartments in `apartments-data` (`/data/apartments.db`); RabbitMQ keeps its queues in `rabbitmq-data`. They survive `docker compose down` and image rebuilds; only `docker compose down -v` deletes them.
 
@@ -223,6 +226,7 @@ APARTMENTS_URL=http://localhost:8001 flask --app apartment_booking.web run --por
 | `APARTMENTS_URL` | web, CLI | unset | apartments service to call; if unset, apartments are served in-process |
 | `APARTMENTS_DB` | apartments service, relay, or web/CLI without `APARTMENTS_URL` | `apartments.db` | apartments database |
 | `RABBITMQ_URL` | relay, consumer | (required) | RabbitMQ to publish to or consume from, including the login |
+| `TRUSTED_PROXIES` | web | `0` | number of reverse proxies in front of the app whose `X-Forwarded-*` headers to trust; Compose sets `1` for nginx. Leave it at `0` when the app is reachable directly |
 
 The CLI takes the same settings as `--bookings-db`, `--apartments-url` and `--apartments-db`. To import an old `data.json`, run `python3 -m apartment_booking.migrate data.json`.
 
@@ -285,11 +289,12 @@ tests/            unit tests (service, API, pages, OpenAPI spec)
 api_tests/        black-box HTTP tests for the REST API
 e2e/              browser tests (Playwright, Chromium)
 scripts/          end-to-end smoke test
+nginx/            gateway configuration (default.conf)
 ```
 
 Apartments and bookings are kept in separate SQLite databases owned by separate services. Each write runs in its own transaction, and booking writes take the database's write lock before checking for overlaps, so two requests can never double-book an apartment. That makes it safe to run several gunicorn workers (the Docker image uses two, with four threads each).
 
-A plan to split apartments into their own microservice (SQLite per service, HTTP plus RabbitMQ events) is described, with architecture diagrams, in [documentation/microservices-plan.md](documentation/microservices-plan.md).
+A plan to split apartments into their own microservice (SQLite per service, HTTP plus RabbitMQ events) is described, with architecture diagrams, in [documentation/microservices-plan.md](documentation/microservices-plan.md). The next stage, an NGINX gateway, a static frontend and pub/sub in both directions, is planned in [documentation/gateway-plan.md](documentation/gateway-plan.md).
 
 ## CI
 
@@ -299,7 +304,7 @@ GitHub Actions (`.github/workflows/ci.yml`) runs on every push to `main` and on 
 - **Code coverage**: measures coverage with [coverage.py](https://coverage.readthedocs.io/) and fails if it drops below 90%. The report is shown in the run summary and uploaded as the `coverage-html` artifact.
 - **HTTP API tests**: runs `api_tests/` against the app started in-process.
 - **Browser tests**: installs Playwright and Chromium and runs the `e2e/` tests against the web UI.
-- **Docker Compose end-to-end**: starts the app with Compose, runs `scripts/smoke_test.py` and the `api_tests/` suite against it, restarts it to check that data persists, checks that an apartment change made while the consumer is stopped reaches the booking side once it is back, stops the apartments service to check for `503` while bookings keep working, and runs the CLI and the tests through Compose.
+- **Docker Compose end-to-end**: starts the app with Compose, runs `scripts/smoke_test.py` and the `api_tests/` suite against it, restarts it to check that data persists, checks that an apartment change made while the consumer is stopped reaches the booking side once it is back, stops the apartments service to check for `503` while bookings keep working, checks that only the gateway is published and that it answers JSON `503` while `web` is down, and runs the CLI and the tests through Compose.
 
 To build for a specific Python version locally:
 

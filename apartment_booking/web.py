@@ -10,6 +10,7 @@ from datetime import date
 
 from flask import Blueprint, Flask, abort, current_app, render_template, request
 from werkzeug.exceptions import HTTPException
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 from common.http import handle_http_error
 
@@ -26,6 +27,10 @@ def create_app(service: BookingService | None = None) -> Flask:
     APARTMENTS_URL  apartments service, e.g. http://apartments:8000; if unset,
                     apartments are served in-process from APARTMENTS_DB
                     (default: apartments.db)
+    TRUSTED_PROXIES number of reverse proxies in front of the app (default 0);
+                    their X-Forwarded-* headers are trusted, so the app sees the
+                    real client. Only set it when the app is reachable solely
+                    through those proxies, or clients could fake their address.
     """
     app = Flask(__name__)
     if service is None:
@@ -33,6 +38,10 @@ def create_app(service: BookingService | None = None) -> Flask:
                                os.environ.get("BOOKINGS_DB", "bookings.db"),
                                os.environ.get("APARTMENTS_URL"))
     app.extensions["booking_service"] = service
+    trusted_proxies = int(os.environ.get("TRUSTED_PROXIES", "0"))
+    if trusted_proxies:
+        app.wsgi_app = ProxyFix(app.wsgi_app, x_for=trusted_proxies, x_proto=trusted_proxies,
+                                x_host=trusted_proxies)
     app.register_blueprint(api)
     app.register_blueprint(pages)
     app.register_error_handler(HTTPException, handle_http_error)

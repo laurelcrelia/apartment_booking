@@ -167,6 +167,20 @@ jobs:
           docker compose start apartments
           docker compose up -d --wait
 
+      - name: Only the gateway is published; JSON 503 while the web app is down
+        run: |
+          # Compose prints ":0" for a port that isn't published, "host:port" otherwise.
+          published=$(docker compose port web 8000 2>/dev/null || true)
+          echo "web 8000 -> '$published'"
+          if echo "$published" | grep -q ':[1-9]'; then echo "web must not be published"; exit 1; fi
+          docker compose stop web
+          # --max-time: the 503 must come quickly, not after NGINX's connect timeout
+          test "$(curl -s --max-time 15 -o body.json -w '%{http_code}' http://localhost:8000/api/apartments)" = 503
+          grep -q '"service_unavailable"' body.json
+          docker compose start web
+          docker compose up -d --wait
+          curl -fsS http://localhost:8000/api/apartments > /dev/null   # nginx finds the restarted web app
+
       - name: CLI shares the data volume
         run: docker compose run --rm booking apartment view ${{ steps.smoke.outputs.KEPT_APARTMENT_ID }}
 

@@ -3,6 +3,8 @@ import tempfile
 import unittest
 from unittest import mock
 
+from flask import request
+
 from apartment_booking.service import open_service
 from apartment_booking.web import create_app
 
@@ -277,6 +279,23 @@ class PersistenceTests(unittest.TestCase):
                     "/api/apartments", json={"name": "Loft", "address": "x"})
             for path in env.values():
                 self.assertTrue(os.path.exists(path), path)
+
+
+class ProxyTests(unittest.TestCase):
+    def client_address(self, env, forwarded_for):
+        with mock.patch.dict(os.environ, env):
+            app = create_app(open_service())
+        app.add_url_rule("/whoami", view_func=lambda: request.remote_addr)
+        return app.test_client().get("/whoami", headers={"X-Forwarded-For": forwarded_for},
+                                     environ_base={"REMOTE_ADDR": "172.18.0.9"}).text
+
+    def test_forwarded_headers_ignored_by_default(self):
+        self.assertEqual(self.client_address({}, "203.0.113.7"), "172.18.0.9")
+
+    def test_trusted_proxy_passes_on_the_client_address(self):
+        self.assertEqual(self.client_address({"TRUSTED_PROXIES": "1"}, "203.0.113.7"), "203.0.113.7")
+        # Only the last hop is trusted: a client can't fake its address.
+        self.assertEqual(self.client_address({"TRUSTED_PROXIES": "1"}, "6.6.6.6, 203.0.113.7"), "203.0.113.7")
 
 
 if __name__ == "__main__":

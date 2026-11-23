@@ -3,10 +3,12 @@ from __future__ import annotations
 
 import sqlite3
 import threading
+import time
 from contextlib import contextmanager, nullcontext
 from pathlib import Path
 
 MEMORY = ":memory:"
+SETUP_TIMEOUT = 10.0
 
 
 class Database:
@@ -28,12 +30,32 @@ class Database:
             self._conn.executescript(schema)
         else:
             Path(self.path).parent.mkdir(parents=True, exist_ok=True)
+            self._set_up(schema)
+
+    def _set_up(self, schema: str) -> None:
+        """Switch the file to WAL mode and apply the schema.
+
+        Several processes may do this at once on a brand-new file (gunicorn
+        workers, a worker next to its service). Switching to WAL needs an
+        exclusive lock and fails at once with "database is locked" instead of
+        waiting, so retry for a while; the schema is idempotent.
+        """
+        deadline = time.monotonic() + SETUP_TIMEOUT
+        delay = 0.01
+        while True:
             conn = self._connect()
             try:
-                conn.execute("PRAGMA journal_mode=WAL")
+                if conn.execute("PRAGMA journal_mode").fetchone()[0] != "wal":
+                    conn.execute("PRAGMA journal_mode=WAL")
                 conn.executescript(schema)
+                return
+            except sqlite3.OperationalError as e:
+                if "locked" not in str(e) or time.monotonic() >= deadline:
+                    raise
             finally:
                 conn.close()
+            time.sleep(delay)
+            delay = min(delay * 2, 0.5)
 
     def close(self) -> None:
         """Release the in-memory connection; file databases hold no open connection."""

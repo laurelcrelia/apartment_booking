@@ -1,5 +1,7 @@
 # Plan: extracting the Apartments microservice
 
+Next stage: [gateway-plan.md](gateway-plan.md) (NGINX gateway, static frontend, pub/sub in both directions).
+
 Status: **done**: implemented on the `microservices-apartments` branch, one commit per step, and merged in pull request #1. A locking bug that showed up in CI after the merge was fixed in pull request #2 (see below). GitHub Actions is green on `main`; the GitLab pipeline hasn't run these changes yet.
 
 ## Why
